@@ -1218,14 +1218,25 @@ const JARVIS_TOOL_MAP = {
   log_mood: toolLogMood
 };
 
-// ── Agent loop ────────────────────────────────────────────────────────────────
+// ── Claude tool definitions (Anthropic format) ───────────────────────────────
+// Convert from OpenAI {type:'function', function:{name,description,parameters}}
+// to Anthropic {name, description, input_schema}
+const CLAUDE_TOOLS = JARVIS_TOOLS.map(t => ({
+  name: t.function.name,
+  description: t.function.description,
+  input_schema: t.function.parameters
+}));
+
+// ── Agent loop (Claude Sonnet) ────────────────────────────────────────────────
 
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, history = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
-    const fetch = require('node-fetch');
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
     const today = new Date().toISOString().slice(0, 10);
     const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
@@ -1253,13 +1264,14 @@ RESPONSE STYLE:
 - If gut symptoms mentioned, acknowledge and note correlation with food if visible in data
 - Keep it tight. Jack doesn't want an essay.`;
 
-    // Build message array: prune any tool messages from saved history (keep text only)
-    const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'assistant')
+    // Clean history — strip any tool messages, keep text only (last 10 turns)
+    const cleanHistory = (history || [])
+      .filter(h => h.role === 'user' || h.role === 'assistant')
       .map(h => ({ role: h.role, content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content) }))
       .slice(-10);
 
+    // Build message array for Claude
     const messages = [
-      { role: 'system', content: systemPrompt },
       ...cleanHistory,
       { role: 'user', content: message }
     ];
@@ -1267,100 +1279,71 @@ RESPONSE STYLE:
     const logged = [];
     let iterations = 0;
     const MAX_ITERATIONS = 8;
-    const MAX_TOOL_CALLS = 12;
-    let totalToolCalls = 0;
     let finalResponse = '';
 
-    // Tool-calling loop (stolen from PitchPredict agent.py)
+    // Claude tool-calling loop
     while (iterations < MAX_ITERATIONS) {
       iterations++;
 
-      // Retry on rate limits (up to 3x, exponential backoff)
-      let apiResponse;
+      let response;
+      // Retry up to 3x on overload/rate limit
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: 'gpt-4o',
-              messages,
-              tools: totalToolCalls < MAX_TOOL_CALLS ? JARVIS_TOOLS : undefined,
-              tool_choice: totalToolCalls < MAX_TOOL_CALLS ? 'auto' : undefined,
-              temperature: 0.3,
-              max_tokens: 1200
-            })
+          response = await client.messages.create({
+            model: 'claude-sonnet-4-5',
+            max_tokens: 1024,
+            system: systemPrompt,
+            tools: CLAUDE_TOOLS,
+            messages
           });
-          apiResponse = await gptRes.json();
-          if (apiResponse.error?.type === 'rate_limit_exceeded') {
-            if (attempt < 2) { await new Promise(r => setTimeout(r, (attempt + 1) * 10000)); continue; }
-            throw new Error(apiResponse.error.message);
-          }
-          if (apiResponse.error) throw new Error(apiResponse.error.message);
           break;
         } catch (e) {
-          if (attempt === 2) throw e;
-          await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
+          if ((e.status === 529 || e.status === 429) && attempt < 2) {
+            await new Promise(r => setTimeout(r, (attempt + 1) * 8000));
+            continue;
+          }
+          throw e;
         }
       }
 
-      const choice = apiResponse.choices[0];
-      const stopReason = choice.finish_reason;
-      const assistantMsg = choice.message;
+      if (response.stop_reason === 'tool_use') {
+        // Add assistant message (contains text + tool_use blocks)
+        messages.push({ role: 'assistant', content: response.content });
 
-      // Add assistant message to running context
-      messages.push(assistantMsg);
-
-      if (stopReason === 'tool_calls' && assistantMsg.tool_calls) {
-        // Execute all tool calls in parallel
+        // Execute all tool calls, collect results
         const toolResults = [];
+        for (const block of response.content) {
+          if (block.type !== 'tool_use') continue;
 
-        for (const tc of assistantMsg.tool_calls) {
-          totalToolCalls++;
-          const fnName = tc.function.name;
-          let args = {};
-          try { args = JSON.parse(tc.function.arguments); } catch {}
-
-          console.log(`[JARVIS] Tool call: ${fnName}`, args);
-
-          const fn = JARVIS_TOOL_MAP[fnName];
+          console.log(`[JARVIS] Tool: ${block.name}`, block.input);
+          const fn = JARVIS_TOOL_MAP[block.name];
           let result;
-          if (fn) {
-            try {
-              result = fn(args);
-              // Track what was logged
-              if (result.logged) logged.push(result.logged);
-            } catch (e) {
-              result = { error: e.message };
-            }
-          } else {
-            result = { error: `Unknown tool: ${fnName}` };
+          try {
+            result = fn ? fn(block.input) : { error: `Unknown tool: ${block.name}` };
+            if (result?.logged) logged.push(result.logged);
+          } catch (e) {
+            result = { error: e.message };
           }
 
           toolResults.push({
-            role: 'tool',
-            tool_call_id: tc.id,
+            type: 'tool_result',
+            tool_use_id: block.id,
             content: JSON.stringify(result)
           });
         }
 
-        // Add all tool results to context and loop
-        messages.push(...toolResults);
-
-        if (totalToolCalls >= MAX_TOOL_CALLS) {
-          console.warn('[JARVIS] Hard tool cap reached — forcing final answer');
-        }
+        // Feed results back as a user turn (Anthropic format)
+        messages.push({ role: 'user', content: toolResults });
         continue;
       }
 
-      if (stopReason === 'stop' || stopReason === 'length') {
-        finalResponse = assistantMsg.content || '';
+      if (response.stop_reason === 'end_turn') {
+        finalResponse = response.content.find(b => b.type === 'text')?.text || '';
         break;
       }
 
-      // Unexpected stop reason
-      console.warn('[JARVIS] Unexpected stop reason:', stopReason);
-      finalResponse = assistantMsg.content || 'Systems nominal.';
+      // Unexpected stop
+      finalResponse = response.content.find(b => b.type === 'text')?.text || 'Systems nominal.';
       break;
     }
 
