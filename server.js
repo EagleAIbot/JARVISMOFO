@@ -1338,6 +1338,20 @@ async function tgTyping(chat_id) {
   } catch {}
 }
 
+async function tgSendPhoto(chat_id, filePath, caption = '') {
+  const fetch = require('node-fetch');
+  const fs = require('fs');
+  const FormData = require('form-data');
+  try {
+    const form = new FormData();
+    form.append('chat_id', String(chat_id));
+    form.append('photo', fs.createReadStream(filePath));
+    if (caption) form.append('caption', caption);
+    form.append('parse_mode', 'Markdown');
+    await fetch(`${TELEGRAM_API}/sendPhoto`, { method: 'POST', body: form });
+  } catch (e) { console.error('[TG] sendPhoto failed:', e.message); }
+}
+
 async function tgAnswer(callback_query_id) {
   const fetch = require('node-fetch');
   try {
@@ -1463,8 +1477,11 @@ app.post('/api/telegram', async (req, res) => {
     // /start
     if (message.text === '/start') {
       saveHistory(chat_id, []); // Reset memory on /start
+      await tgSendPhoto(chat_id,
+        path.join(__dirname, 'public', 'jarvis-logo.png'),
+        `*J.A.R.V.I.S. ONLINE* ⚡`
+      );
       await tgSend(chat_id,
-        `*J.A.R.V.I.S. ONLINE* ⚡\n\n` +
         `Good. All systems operational, ${from}.\n\n` +
         `Just talk to me naturally — I'll log everything:\n` +
         `• _"had chicken and rice for lunch"_ → logs diet\n` +
