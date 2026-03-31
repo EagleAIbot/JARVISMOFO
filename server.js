@@ -95,55 +95,55 @@ app.post('/api/health', (req, res) => {
       if (!type) continue;
 
       try {
-        if (t === 'heart_rate' || type === 'HeartRate') {
+        if (t === 'heart_rate' || t === 'heartrate' || type === 'HeartRate') {
           ingestHeartRate(database, metric);
           results.ingested.push('heart_rate');
-        } else if (t === 'heart_rate_variability_sdnn' || t === 'hrv' || type === 'HeartRateVariabilitySDNN') {
+        } else if (t === 'heart_rate_variability_sdnn' || t === 'hrv' || t === 'heartratevariabilitysdnn' || type === 'HeartRateVariabilitySDNN') {
           ingestHRV(database, metric);
           results.ingested.push('hrv');
-        } else if (t === 'sleep_analysis' || t === 'sleep' || type === 'SleepAnalysis') {
+        } else if (t === 'sleep_analysis' || t === 'sleep' || t === 'sleepanalysis' || type === 'SleepAnalysis') {
           ingestSleep(database, metric);
           results.ingested.push('sleep');
-        } else if (t === 'step_count' || t === 'steps' || type === 'StepCount') {
+        } else if (t === 'step_count' || t === 'steps' || t === 'stepcount' || type === 'StepCount') {
           ingestActivity(database, metric, 'steps');
           results.ingested.push('steps');
-        } else if (t === 'active_energy_burned' || t === 'active_calories' || type === 'ActiveEnergyBurned') {
+        } else if (t === 'active_energy_burned' || t === 'active_calories' || t === 'activeenergyburned' || type === 'ActiveEnergyBurned') {
           ingestActivity(database, metric, 'active_calories');
           results.ingested.push('active_calories');
-        } else if (t === 'exercise_time' || t === 'exercise_minutes' || type === 'ExerciseTime') {
+        } else if (t === 'exercise_time' || t === 'exercise_minutes' || t === 'exercisetime' || type === 'ExerciseTime') {
           ingestActivity(database, metric, 'exercise_minutes');
           results.ingested.push('exercise_minutes');
-        } else if (t === 'oxygen_saturation' || t === 'spo2' || type === 'OxygenSaturation') {
+        } else if (t === 'oxygen_saturation' || t === 'spo2' || t === 'oxygensaturation' || type === 'OxygenSaturation') {
           ingestSpO2(database, metric);
           results.ingested.push('spo2');
-        } else if (t === 'apple_sleeping_wrist_temperature' || t === 'wrist_temperature' || type === 'AppleSleepingWristTemperature') {
+        } else if (t === 'apple_sleeping_wrist_temperature' || t === 'wrist_temperature' || t === 'applesleepingwristtemperature' || type === 'AppleSleepingWristTemperature') {
           ingestTemperature(database, metric);
           results.ingested.push('temperature');
         } else if (t === 'vo2_max' || t === 'vo2max' || type === 'VO2Max') {
           ingestVO2Max(database, metric);
           results.ingested.push('vo2max');
-        } else if (t === 'resting_heart_rate' || type === 'RestingHeartRate') {
+        } else if (t === 'resting_heart_rate' || t === 'restingheartrate' || type === 'RestingHeartRate') {
           ingestRestingHR(database, metric);
           results.ingested.push('resting_hr');
         } else if (t === 'workout' || type === 'Workout') {
           ingestWorkout(database, metric);
           results.ingested.push('workout');
-        } else if (t === 'mindful_session' || t === 'state_of_mind' || type === 'MindfulSession') {
+        } else if (t === 'mindful_session' || t === 'state_of_mind' || t === 'mindfulsession' || type === 'MindfulSession') {
           ingestStateOfMind(database, metric);
           results.ingested.push('state_of_mind');
-        } else if (t === 'respiratory_rate' || type === 'RespiratoryRate') {
+        } else if (t === 'respiratory_rate' || t === 'respiratoryrate' || type === 'RespiratoryRate') {
           ingestRespiratoryRate(database, metric);
           results.ingested.push('respiratory_rate');
-        } else if (t === 'flights_climbed' || type === 'FlightsClimbed') {
+        } else if (t === 'flights_climbed' || t === 'flightsclimbed' || type === 'FlightsClimbed') {
           ingestActivity(database, metric, 'flights');
           results.ingested.push('flights');
-        } else if (t === 'distance_walking_running' || type === 'DistanceWalkingRunning') {
+        } else if (t === 'distance_walking_running' || t === 'distancewalkingrunning' || type === 'DistanceWalkingRunning') {
           ingestActivity(database, metric, 'distance');
           results.ingested.push('distance');
-        } else if (t === 'body_mass' || t === 'weight' || type === 'BodyMass') {
+        } else if (t === 'body_mass' || t === 'weight' || t === 'bodymass' || type === 'BodyMass') {
           ingestBodyComp(database, metric, 'weight_kg');
           results.ingested.push('weight');
-        } else if (t === 'body_fat_percentage' || type === 'BodyFatPercentage') {
+        } else if (t === 'body_fat_percentage' || t === 'bodyfatpercentage' || type === 'BodyFatPercentage') {
           ingestBodyComp(database, metric, 'body_fat_pct');
           results.ingested.push('body_fat');
         } else {
@@ -239,6 +239,7 @@ function ingestHRV(db, metric) {
 }
 
 function ingestSleep(db, metric) {
+  // ── Format A: summary object with sleepStart/sleepEnd (old Health Auto Export) ──
   if (metric.sleepStart && metric.sleepEnd) {
     const date = metric.sleepEnd.slice(0, 10);
     const totalMin = Math.round((new Date(metric.sleepEnd) - new Date(metric.sleepStart)) / 60000);
@@ -255,7 +256,6 @@ function ingestSleep(db, metric) {
       core_minutes=excluded.core_minutes, awake_minutes=excluded.awake_minutes, efficiency=excluded.efficiency`
     ).run(date, metric.sleepStart, metric.sleepEnd, totalMin, deep, rem, core, awake, efficiency);
 
-    // Ingest stages if present
     if (metric.stages && Array.isArray(metric.stages)) {
       for (const stage of metric.stages) {
         const dur = Math.round((new Date(stage.endDate) - new Date(stage.startDate)) / 60000);
@@ -263,6 +263,94 @@ function ingestSleep(db, metric) {
           .run(date, stage.stage, stage.startDate, stage.endDate, dur);
       }
     }
+    return;
+  }
+
+  // ── Format B: individual interval with startDate + endDate + value (Health Auto Export v2) ──
+  // Each data point is one sleep stage interval. Called once per interval.
+  const startStr = metric.startDate || metric.start_date;
+  const endStr = metric.endDate || metric.end_date;
+  const stageValue = String(metric.value || metric.stage || '');
+
+  if (!startStr || !endStr || !stageValue) return;
+
+  // Parse timestamps — handle "2026-03-31 07:30:00 +0100" style
+  const parseTs = ts => new Date(String(ts).replace(/\s([+-]\d{2}):?(\d{2})$/, '$1:$2').replace(' ', 'T'));
+  const startDate = parseTs(startStr);
+  const endDate = parseTs(endStr);
+  if (isNaN(startDate) || isNaN(endDate)) return;
+
+  const durationMin = Math.round((endDate - startDate) / 60000);
+  if (durationMin <= 0) return;
+
+  // Night date = date of end time (handles midnight crossover)
+  const nightDate = endStr.slice(0, 10);
+
+  // Map Apple Health sleep stage string → column
+  const sl = stageValue.toLowerCase();
+  let stageCol = null;
+  if (sl.includes('deep')) stageCol = 'deep_minutes';
+  else if (sl.includes('rem')) stageCol = 'rem_minutes';
+  else if (sl.includes('core')) stageCol = 'core_minutes';
+  else if (sl.includes('awake')) stageCol = 'awake_minutes';
+  else if (sl.includes('inbed')) stageCol = 'awake_minutes'; // InBed but not asleep
+  else if (sl.includes('asleep')) stageCol = 'core_minutes'; // generic asleep → core
+
+  const isAwakeStage = stageCol === 'awake_minutes';
+
+  const existing = db.prepare('SELECT * FROM sleep WHERE date = ?').get(nightDate);
+
+  if (existing) {
+    const updates = [];
+    const params = [];
+    // Track earliest start
+    if (!existing.start_time || startStr < existing.start_time) {
+      updates.push('start_time = ?'); params.push(startStr);
+    }
+    // Track latest end
+    if (!existing.end_time || endStr > existing.end_time) {
+      updates.push('end_time = ?'); params.push(endStr);
+    }
+    // Add to stage column
+    if (stageCol) {
+      updates.push(`${stageCol} = COALESCE(${stageCol}, 0) + ?`);
+      params.push(durationMin);
+    }
+    // Only count non-awake time toward total
+    if (stageCol && !isAwakeStage) {
+      updates.push('total_minutes = COALESCE(total_minutes, 0) + ?');
+      params.push(durationMin);
+    }
+    if (updates.length > 0) {
+      params.push(nightDate);
+      db.prepare(`UPDATE sleep SET ${updates.join(', ')} WHERE date = ?`).run(...params);
+    }
+    // Recalculate efficiency
+    const updated = db.prepare('SELECT total_minutes, awake_minutes FROM sleep WHERE date = ?').get(nightDate);
+    if (updated && updated.total_minutes > 0) {
+      const eff = Math.round(((updated.total_minutes) / (updated.total_minutes + (updated.awake_minutes || 0))) * 100);
+      db.prepare('UPDATE sleep SET efficiency = ? WHERE date = ?').run(eff, nightDate);
+    }
+  } else {
+    db.prepare(`INSERT INTO sleep (date, start_time, end_time, total_minutes, deep_minutes, rem_minutes, core_minutes, awake_minutes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(
+        nightDate, startStr, endStr,
+        isAwakeStage ? 0 : durationMin,
+        stageCol === 'deep_minutes' ? durationMin : 0,
+        stageCol === 'rem_minutes' ? durationMin : 0,
+        stageCol === 'core_minutes' ? durationMin : 0,
+        stageCol === 'awake_minutes' ? durationMin : 0
+      );
+  }
+
+  // Store individual stage segment
+  if (stageCol) {
+    const stageNameMap = { deep_minutes: 'Deep', rem_minutes: 'REM', core_minutes: 'Core', awake_minutes: 'Awake' };
+    try {
+      db.prepare('INSERT OR IGNORE INTO sleep_stages (date, stage, start_time, end_time, duration_minutes) VALUES (?, ?, ?, ?, ?)')
+        .run(nightDate, stageNameMap[stageCol] || 'Unknown', startStr, endStr, durationMin);
+    } catch {}
   }
 }
 
@@ -836,7 +924,7 @@ function toolGetHealthSnapshot() {
     const sevenDaysAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
 
     const hrv = database.prepare(`SELECT rmssd, timestamp FROM hrv ORDER BY timestamp DESC LIMIT 1`).get();
-    const rhr = database.prepare(`SELECT resting_hr FROM vitals ORDER BY date DESC LIMIT 1`).get();
+    const rhr = database.prepare(`SELECT resting_hr FROM vitals WHERE resting_hr IS NOT NULL ORDER BY date DESC LIMIT 1`).get();
     const steps = database.prepare(`SELECT steps, active_calories, exercise_minutes FROM activity ORDER BY date DESC LIMIT 1`).get();
     const sleep = database.prepare(`SELECT date, total_minutes, deep_minutes, rem_minutes, efficiency FROM sleep ORDER BY date DESC LIMIT 1`).get();
     const spo2 = database.prepare(`SELECT value FROM spo2 ORDER BY timestamp DESC LIMIT 1`).get();
@@ -876,7 +964,7 @@ function toolGetRecentLogs({ category, days = 7 }) {
       workout: `SELECT date, type, duration_minutes, avg_hr, notes FROM workouts WHERE date >= ? ORDER BY date DESC LIMIT 15`,
       body_comp: `SELECT date, weight_kg, body_fat_pct, lean_mass_kg FROM body_comp WHERE date >= ? ORDER BY date DESC LIMIT 10`,
       sleep: `SELECT date, total_minutes, deep_minutes, rem_minutes, efficiency FROM sleep WHERE date >= ? ORDER BY date DESC LIMIT 10`,
-      hrv: `SELECT DATE(timestamp) as date, rmssd FROM hrv WHERE DATE(timestamp) >= ? ORDER BY timestamp DESC LIMIT 10`,
+      hrv: `SELECT SUBSTR(timestamp, 1, 10) as date, rmssd FROM hrv WHERE SUBSTR(timestamp, 1, 10) >= ? ORDER BY timestamp DESC LIMIT 10`,
       supplement: `SELECT date, name, dose, timing FROM supplements WHERE date >= ? ORDER BY date DESC LIMIT 20`,
     };
 
