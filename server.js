@@ -822,152 +822,464 @@ cron.schedule('0 8 * * 0', async () => {
   }
 });
 
-// ─── JARVIS Chat — Natural Language Logging ──────────────────────────────────
+// ─── JARVIS Chat — Tool-Calling Agent Loop (PitchPredict pattern) ────────────
+//
+// Architecture (stolen from PitchPredict's agent.py):
+//  User message → GPT-4o with tools → execute tools → loop until final answer
+//  Tools give JARVIS actual DB access: it CAN query data, not just log it.
+
+// ── Tool executor functions ───────────────────────────────────────────────────
+
+function toolGetHealthSnapshot() {
+  try {
+    const database = db.getDb();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+
+    const hrv = database.prepare(`SELECT rmssd, timestamp FROM hrv ORDER BY timestamp DESC LIMIT 1`).get();
+    const rhr = database.prepare(`SELECT resting_hr FROM vitals ORDER BY date DESC LIMIT 1`).get();
+    const steps = database.prepare(`SELECT steps, active_calories, exercise_minutes FROM activity ORDER BY date DESC LIMIT 1`).get();
+    const sleep = database.prepare(`SELECT date, total_minutes, deep_minutes, rem_minutes, efficiency FROM sleep ORDER BY date DESC LIMIT 1`).get();
+    const spo2 = database.prepare(`SELECT value FROM spo2 ORDER BY timestamp DESC LIMIT 1`).get();
+    const weight = database.prepare(`SELECT weight_kg, body_fat_pct FROM body_comp ORDER BY date DESC LIMIT 1`).get();
+    const gut7 = database.prepare(`SELECT AVG(pain_severity) as avg_pain, AVG(bloat_level) as avg_bloat FROM gut_logs WHERE date >= ?`).get(sevenDaysAgo);
+    const workouts7 = database.prepare(`SELECT COUNT(*) as count FROM workouts WHERE date >= ?`).get(sevenDaysAgo);
+
+    const sleepHours = sleep ? `${Math.floor(sleep.total_minutes / 60)}h${sleep.total_minutes % 60}m` : null;
+
+    return {
+      hrv_rmssd_ms: hrv?.rmssd || null,
+      hrv_timestamp: hrv?.timestamp || null,
+      resting_hr_bpm: rhr?.resting_hr || null,
+      steps_today: steps?.steps || null,
+      active_calories_today: steps?.active_calories || null,
+      exercise_minutes_today: steps?.exercise_minutes || null,
+      sleep: sleep ? { date: sleep.date, total: sleepHours, total_minutes: sleep.total_minutes, deep_min: sleep.deep_minutes, rem_min: sleep.rem_minutes, efficiency: sleep.efficiency } : null,
+      spo2_pct: spo2?.value || null,
+      weight_kg: weight?.weight_kg || null,
+      body_fat_pct: weight?.body_fat_pct || null,
+      gut_7day_avg: { pain: gut7?.avg_pain ? parseFloat(gut7.avg_pain).toFixed(1) : null, bloat: gut7?.avg_bloat ? parseFloat(gut7.avg_bloat).toFixed(1) : null },
+      workouts_this_week: workouts7?.count || 0
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function toolGetRecentLogs({ category, days = 7 }) {
+  try {
+    const database = db.getDb();
+    const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+
+    const queries = {
+      diet: `SELECT date, meal_type, food_name, calories, protein, carbs, fat FROM diet_logs WHERE date >= ? ORDER BY date DESC LIMIT 20`,
+      gut: `SELECT date, pain_severity, bloat_level, gas_level, reflux_level, bristol_type, notes FROM gut_logs WHERE date >= ? ORDER BY date DESC LIMIT 20`,
+      workout: `SELECT date, type, duration_minutes, avg_hr, notes FROM workouts WHERE date >= ? ORDER BY date DESC LIMIT 15`,
+      body_comp: `SELECT date, weight_kg, body_fat_pct, lean_mass_kg FROM body_comp WHERE date >= ? ORDER BY date DESC LIMIT 10`,
+      sleep: `SELECT date, total_minutes, deep_minutes, rem_minutes, efficiency FROM sleep WHERE date >= ? ORDER BY date DESC LIMIT 10`,
+      hrv: `SELECT DATE(timestamp) as date, rmssd FROM hrv WHERE DATE(timestamp) >= ? ORDER BY timestamp DESC LIMIT 10`,
+      supplement: `SELECT date, name, dose, timing FROM supplements WHERE date >= ? ORDER BY date DESC LIMIT 20`,
+    };
+
+    const sql = queries[category];
+    if (!sql) return { error: `Unknown category '${category}'. Valid: diet, gut, workout, body_comp, sleep, hrv, supplement` };
+
+    const rows = database.prepare(sql).all(since);
+    return { category, days, count: rows.length, data: rows };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+function toolLogDiet({ food_name, meal_type = 'meal', calories = null, protein_g = null, carbs_g = null, fat_g = null, fiber_g = null, notes = '', date = null }) {
+  try {
+    const database = db.getDb();
+    const d = date || new Date().toISOString().slice(0, 10);
+    database.prepare(`INSERT INTO diet_logs (date, meal_type, food_name, calories, protein, carbs, fat, fibre, raw_input) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(d, meal_type, food_name || 'Food', calories, protein_g, carbs_g, fat_g, fiber_g, `[JARVIS] ${food_name || ''}`);
+    return { success: true, logged: `diet: ${food_name}`, date: d };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function toolLogGut({ pain_severity = 0, bloat_level = 0, gas_level = 0, reflux_level = 0, bristol_type = null, pain_locations = null, notes = '', date = null }) {
+  try {
+    const database = db.getDb();
+    const d = date || new Date().toISOString().slice(0, 10);
+    database.prepare(`INSERT INTO gut_logs (date, pain_severity, bloat_level, gas_level, reflux_level, bristol_type, pain_locations, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(d, pain_severity, bloat_level, gas_level, reflux_level, bristol_type, pain_locations, notes);
+    return { success: true, logged: 'gut log', date: d };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function toolLogWorkout({ type = 'Other', duration_min = null, avg_hr = null, notes = '', date = null }) {
+  try {
+    const database = db.getDb();
+    const d = date || new Date().toISOString().slice(0, 10);
+    database.prepare(`INSERT INTO workouts (date, type, duration_minutes, avg_hr, notes, source) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(d, type, duration_min, avg_hr, notes, 'jarvis-chat');
+    return { success: true, logged: `workout: ${type}`, date: d };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function toolLogBodyComp({ weight_kg = null, body_fat_pct = null, waist_cm = null, notes = '', date = null }) {
+  try {
+    const database = db.getDb();
+    const d = date || new Date().toISOString().slice(0, 10);
+    const lean = weight_kg && body_fat_pct ? Math.round((weight_kg * (1 - body_fat_pct / 100)) * 10) / 10 : null;
+    database.prepare(`INSERT INTO body_comp (date, weight_kg, body_fat_pct, lean_mass_kg, waist_cm, source, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(d, weight_kg, body_fat_pct, lean, waist_cm, 'jarvis-chat', notes);
+    return { success: true, logged: 'body comp', date: d, lean_mass_kg: lean };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function toolLogSupplement({ name, dose = '', timing = 'morning', notes = '', date = null }) {
+  try {
+    const database = db.getDb();
+    const d = date || new Date().toISOString().slice(0, 10);
+    database.prepare(`INSERT INTO supplements (date, name, dose, form, timing, notes) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(d, name, dose, '', timing, notes);
+    return { success: true, logged: `supplement: ${name}`, date: d };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function toolLogMood({ valence = 'neutral', energy = 'medium', notes = '', focus_score = null, energy_score = null, mood_score = null, date = null }) {
+  try {
+    const database = db.getDb();
+    const d = date || new Date().toISOString().slice(0, 10);
+    // Map string valence to numeric (Apple Health scale)
+    const valenceMap = { pleasant: 5, slightly_pleasant: 4, neutral: 3, slightly_unpleasant: 2, unpleasant: 1 };
+    const valenceNum = valenceMap[valence] || 3;
+    database.prepare(`INSERT INTO state_of_mind (date, valence, labels, associations, source) VALUES (?, ?, ?, ?, ?)`)
+      .run(d, valenceNum, energy, notes || '', 'jarvis-chat');
+    if (focus_score || energy_score || mood_score) {
+      database.prepare(`INSERT INTO cognitive_tests (date, test_type, notes, stress_level) VALUES (?, ?, ?, ?)`)
+        .run(d, 'journal', notes || '', null);
+    }
+    return { success: true, logged: 'mood/cognitive log', date: d };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+// ── Tool definitions (OpenAI format) ─────────────────────────────────────────
+
+const JARVIS_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_health_snapshot',
+      description: 'Get Jack\'s current biometric snapshot: HRV, resting HR, steps, sleep, SpO2, weight, 7-day gut averages, workout count this week. Use this when Jack asks how he\'s doing, wants a status check, or you need context before answering a health question.',
+      parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_recent_logs',
+      description: 'Query recent logged data from a specific category. Use this to answer questions like "how has my gut been?", "what did I eat this week?", "show me my recent workouts", etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            enum: ['diet', 'gut', 'workout', 'body_comp', 'sleep', 'hrv', 'supplement'],
+            description: 'Which data category to query'
+          },
+          days: {
+            type: 'integer',
+            description: 'How many days back to look (default 7)',
+            default: 7
+          }
+        },
+        required: ['category']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_diet',
+      description: 'Log a meal or food item Jack ate. Estimate calories/macros if not given.',
+      parameters: {
+        type: 'object',
+        properties: {
+          food_name: { type: 'string', description: 'Name of the food or meal' },
+          meal_type: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack', 'meal'], description: 'Meal type' },
+          calories: { type: 'number', description: 'Estimated calories (null if unknown)' },
+          protein_g: { type: 'number', description: 'Protein in grams' },
+          carbs_g: { type: 'number', description: 'Carbs in grams' },
+          fat_g: { type: 'number', description: 'Fat in grams' },
+          fiber_g: { type: 'number', description: 'Fibre in grams' },
+          notes: { type: 'string', description: 'Any extra notes' },
+          date: { type: 'string', description: 'Date in YYYY-MM-DD format (null = today)' }
+        },
+        required: ['food_name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_gut',
+      description: 'Log gut health symptoms: pain, bloating, gas, reflux, bowel movement type. Use when Jack mentions stomach issues, gut symptoms, or digestive events.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pain_severity: { type: 'number', description: 'Pain level 0-10' },
+          bloat_level: { type: 'number', description: 'Bloating level 0-10' },
+          gas_level: { type: 'number', description: 'Gas level 0-10' },
+          reflux_level: { type: 'number', description: 'Reflux/heartburn level 0-10' },
+          bristol_type: { type: 'number', description: 'Bristol stool scale 1-7 (null if not mentioned)' },
+          pain_locations: { type: 'string', description: 'Where is the pain? e.g. "lower right"' },
+          notes: { type: 'string', description: 'Description of symptoms' },
+          date: { type: 'string', description: 'Date in YYYY-MM-DD (null = today)' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_workout',
+      description: 'Log a workout session. Use when Jack mentions training, gym, running, cycling, sport etc.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['Zone 2 Cardio', 'Strength', 'HIIT', 'Sport', 'Walk', 'Run', 'Cycling', 'Other'], description: 'Workout type' },
+          duration_min: { type: 'number', description: 'Duration in minutes' },
+          avg_hr: { type: 'number', description: 'Average heart rate bpm (null if unknown)' },
+          notes: { type: 'string', description: 'Workout notes, exercises done, how it felt' },
+          date: { type: 'string', description: 'Date in YYYY-MM-DD (null = today)' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_body_comp',
+      description: 'Log body composition data: weight, body fat %, waist measurement.',
+      parameters: {
+        type: 'object',
+        properties: {
+          weight_kg: { type: 'number', description: 'Weight in kg' },
+          body_fat_pct: { type: 'number', description: 'Body fat percentage' },
+          waist_cm: { type: 'number', description: 'Waist circumference in cm' },
+          notes: { type: 'string', description: 'Notes' },
+          date: { type: 'string', description: 'Date in YYYY-MM-DD (null = today)' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_supplement',
+      description: 'Log a supplement Jack took.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Supplement name e.g. "Creatine", "Omega-3"' },
+          dose: { type: 'string', description: 'Dose e.g. "5g", "2 capsules"' },
+          timing: { type: 'string', enum: ['morning', 'afternoon', 'evening', 'pre-workout', 'post-workout', 'with-meal', 'before-bed'], description: 'When taken' },
+          notes: { type: 'string', description: 'Notes' },
+          date: { type: 'string', description: 'Date in YYYY-MM-DD (null = today)' }
+        },
+        required: ['name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_mood',
+      description: 'Log mood, mental state, energy levels, cognitive performance. Use when Jack mentions how he feels, energy, focus, stress, mood.',
+      parameters: {
+        type: 'object',
+        properties: {
+          valence: { type: 'string', enum: ['pleasant', 'slightly_pleasant', 'neutral', 'slightly_unpleasant', 'unpleasant'], description: 'Overall emotional valence' },
+          energy: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Energy level' },
+          notes: { type: 'string', description: 'Description of mental/cognitive state' },
+          focus_score: { type: 'number', description: 'Focus score 1-10 (null if not mentioned)' },
+          energy_score: { type: 'number', description: 'Energy score 1-10 (null if not mentioned)' },
+          mood_score: { type: 'number', description: 'Mood score 1-10 (null if not mentioned)' },
+          date: { type: 'string', description: 'Date in YYYY-MM-DD (null = today)' }
+        }
+      }
+    }
+  }
+];
+
+const JARVIS_TOOL_MAP = {
+  get_health_snapshot: toolGetHealthSnapshot,
+  get_recent_logs: toolGetRecentLogs,
+  log_diet: toolLogDiet,
+  log_gut: toolLogGut,
+  log_workout: toolLogWorkout,
+  log_body_comp: toolLogBodyComp,
+  log_supplement: toolLogSupplement,
+  log_mood: toolLogMood
+};
+
+// ── Agent loop ────────────────────────────────────────────────────────────────
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, history = [], contextExtra = '' } = req.body;
+    const { message, history = [] } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
     const fetch = require('node-fetch');
     const today = new Date().toISOString().slice(0, 10);
+    const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
-    const systemPrompt = `You are JARVIS, Jack's personal AI health assistant integrated into his health OS.
-Jack: 25 years old, 6'2" (188cm), ~100kg, male, lean bulking / performance focus.
+    const systemPrompt = `You are JARVIS — Jack's personal AI health OS, modelled on Iron Man's AI.
+Jack: 25yo male, 6'2" (188cm), ~100kg, lean bulking / performance optimisation focus.
+Today: ${dayName} ${today}
 
-When Jack tells you about his day, you:
-1. Extract any health data mentioned
-2. Log it by returning structured actions
-3. Respond conversationally like the real JARVIS — concise, intelligent, slightly dry
+Your job:
+1. Log anything Jack mentions about his health (food, gut, workouts, mood, supplements, body comp)
+2. Answer health questions by QUERYING real data using your tools — never guess when you can look it up
+3. Respond like the real JARVIS — intelligent, dry, efficient. 1-3 sentences MAX unless asked for detail.
 
-TODAY'S DATE: ${today}${contextExtra}
+TOOL USE RULES:
+- If Jack asks how he's doing / status / how data looks → call get_health_snapshot FIRST, then answer
+- If Jack asks about a trend ("how's my gut been?") → call get_recent_logs for that category
+- If Jack describes food/gut/workout/mood → call the appropriate log_* tool(s)
+- You CAN call multiple tools in one turn (e.g. log_diet + log_gut + get_health_snapshot)
+- ONLY log things Jack actually mentions. Don't fabricate data.
+- Estimate reasonable calories/macros if Jack describes food without numbers
+- After logging, give a brief confirmation + any relevant insight from the data
 
-You can log the following action types. Return a JSON object with:
-- "response": your conversational reply to Jack (1-3 sentences max, JARVIS-style)
-- "actions": array of logging actions to execute
+RESPONSE STYLE:
+- Dry wit, direct, never sycophantic
+- Don't say "I've logged" over and over — vary the language
+- If gut symptoms mentioned, acknowledge and note correlation with food if visible in data
+- Keep it tight. Jack doesn't want an essay.`;
 
-ACTION TYPES:
-
-{ "type": "diet", "data": { "food_name": "string", "meal_type": "breakfast|lunch|dinner|snack", "calories": number|null, "protein_g": number|null, "carbs_g": number|null, "fat_g": number|null, "fiber_g": number|null, "notes": "string" } }
-
-{ "type": "gut", "data": { "pain_severity": 0-10, "bloat_level": 0-10, "gas_level": 0-10, "reflux_level": 0-10, "bristol_type": 1-7|null, "pain_locations": "string|null", "notes": "string" } }
-
-{ "type": "workout", "data": { "type": "Zone 2 Cardio|Strength|HIIT|Sport|Walk|Other", "duration_min": number, "avg_hr": number|null, "notes": "string" } }
-
-{ "type": "body_comp", "data": { "weight_kg": number|null, "body_fat_pct": number|null, "waist_cm": number|null, "notes": "string" } }
-
-{ "type": "supplement", "data": { "name": "string", "dose": "string", "timing": "morning|afternoon|evening|pre-workout|post-workout|with-meal|before-bed" } }
-
-{ "type": "cognitive", "data": { "notes": "string", "focus_score": 1-10|null, "energy_score": 1-10|null, "mood_score": 1-10|null } }
-
-{ "type": "state_of_mind", "data": { "valence": "pleasant|slightly_pleasant|neutral|slightly_unpleasant|unpleasant", "energy": "high|medium|low", "notes": "string" } }
-
-RULES:
-- Only log things Jack actually mentions. Don't invent data.
-- Estimate calories/macros if Jack describes food without exact numbers (use realistic values)
-- If nothing to log, return empty actions array and just chat
-- Keep response under 60 words, JARVIS-style (intelligent, dry, helpful)
-- Never say "I've logged" repeatedly — vary your language
-- If Jack mentions pain/discomfort, acknowledge it and ask a brief follow-up if relevant
-
-Return ONLY valid JSON. No markdown, no explanation outside the JSON.`;
+    // Build message array: prune any tool messages from saved history (keep text only)
+    const cleanHistory = (history || []).filter(h => h.role === 'user' || h.role === 'assistant')
+      .map(h => ({ role: h.role, content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content) }))
+      .slice(-10);
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...history.slice(-6).map(h => ({ role: h.role, content: h.content })),
+      ...cleanHistory,
       { role: 'user', content: message }
     ];
 
-    const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        max_tokens: 800
-      })
-    });
-
-    const gptData = await gptRes.json();
-    if (gptData.error) throw new Error(gptData.error.message);
-
-    let parsed;
-    try {
-      parsed = JSON.parse(gptData.choices[0].message.content);
-    } catch {
-      parsed = { response: gptData.choices[0].message.content, actions: [] };
-    }
-
-    const { response, actions = [] } = parsed;
     const logged = [];
-    const database = db.getDb();
+    let iterations = 0;
+    const MAX_ITERATIONS = 8;
+    const MAX_TOOL_CALLS = 12;
+    let totalToolCalls = 0;
+    let finalResponse = '';
 
-    for (const action of actions) {
-      try {
-        const d = action.data;
-        const date = d.date || today;
+    // Tool-calling loop (stolen from PitchPredict agent.py)
+    while (iterations < MAX_ITERATIONS) {
+      iterations++;
 
-        if (action.type === 'diet') {
-          database.prepare(`INSERT INTO diet_logs (date, meal_type, food_name, calories, protein, carbs, fat, fibre, raw_input)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            date, d.meal_type || 'meal', d.food_name || 'Food', d.calories || null,
-            d.protein_g || null, d.carbs_g || null, d.fat_g || null, d.fiber_g || null,
-            `[JARVIS Chat] ${d.food_name || ''}`);
-          logged.push(`diet: ${d.food_name}`);
-
-        } else if (action.type === 'gut') {
-          database.prepare(`INSERT INTO gut_logs (date, pain_severity, bloat_level, gas_level, reflux_level, bristol_type, pain_locations, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            date, d.pain_severity ?? 0, d.bloat_level ?? 0, d.gas_level ?? 0,
-            d.reflux_level ?? 0, d.bristol_type || null, d.pain_locations || null, d.notes || '');
-          logged.push('gut log');
-
-        } else if (action.type === 'workout') {
-          database.prepare(`INSERT INTO workouts (date, type, duration_minutes, avg_hr, notes, source)
-            VALUES (?, ?, ?, ?, ?, ?)`).run(
-            date, d.type || 'Other', d.duration_min || null, d.avg_hr || null, d.notes || '', 'jarvis-chat');
-          logged.push(`workout: ${d.type}`);
-
-        } else if (action.type === 'body_comp') {
-          const bf = d.body_fat_pct || null;
-          const wt = d.weight_kg || null;
-          const lean = wt && bf ? Math.round((wt * (1 - bf / 100)) * 10) / 10 : null;
-          database.prepare(`INSERT INTO body_comp (date, weight_kg, body_fat_pct, lean_mass_kg, waist_cm, source, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-            date, wt, bf, lean, d.waist_cm || null, 'jarvis-chat', d.notes || '');
-          logged.push('body comp');
-
-        } else if (action.type === 'supplement') {
-          database.prepare(`INSERT INTO supplements (date, name, dose, form, timing, notes)
-            VALUES (?, ?, ?, ?, ?, ?)`).run(
-            date, d.name, d.dose || '', d.form || '', d.timing || 'morning', d.notes || '');
-          logged.push(`supplement: ${d.name}`);
-
-        } else if (action.type === 'cognitive') {
-          database.prepare(`INSERT INTO cognitive_tests (date, test_type, notes, stress_level)
-            VALUES (?, ?, ?, ?)`).run(
-            date, 'journal', d.notes || '', d.stress_level || null);
-          logged.push('cognitive log');
-
-        } else if (action.type === 'state_of_mind') {
-          database.prepare(`INSERT INTO state_of_mind (date, valence, labels, notes, source)
-            VALUES (?, ?, ?, ?, ?)`).run(
-            date, d.valence || 'neutral', d.energy || '', d.notes || '', 'jarvis-chat');
-          logged.push('state of mind');
+      // Retry on rate limits (up to 3x, exponential backoff)
+      let apiResponse;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'gpt-4o',
+              messages,
+              tools: totalToolCalls < MAX_TOOL_CALLS ? JARVIS_TOOLS : undefined,
+              tool_choice: totalToolCalls < MAX_TOOL_CALLS ? 'auto' : undefined,
+              temperature: 0.3,
+              max_tokens: 1200
+            })
+          });
+          apiResponse = await gptRes.json();
+          if (apiResponse.error?.type === 'rate_limit_exceeded') {
+            if (attempt < 2) { await new Promise(r => setTimeout(r, (attempt + 1) * 10000)); continue; }
+            throw new Error(apiResponse.error.message);
+          }
+          if (apiResponse.error) throw new Error(apiResponse.error.message);
+          break;
+        } catch (e) {
+          if (attempt === 2) throw e;
+          await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
         }
-      } catch (actionErr) {
-        console.error(`[CHAT] Action ${action.type} failed:`, actionErr.message);
       }
+
+      const choice = apiResponse.choices[0];
+      const stopReason = choice.finish_reason;
+      const assistantMsg = choice.message;
+
+      // Add assistant message to running context
+      messages.push(assistantMsg);
+
+      if (stopReason === 'tool_calls' && assistantMsg.tool_calls) {
+        // Execute all tool calls in parallel
+        const toolResults = [];
+
+        for (const tc of assistantMsg.tool_calls) {
+          totalToolCalls++;
+          const fnName = tc.function.name;
+          let args = {};
+          try { args = JSON.parse(tc.function.arguments); } catch {}
+
+          console.log(`[JARVIS] Tool call: ${fnName}`, args);
+
+          const fn = JARVIS_TOOL_MAP[fnName];
+          let result;
+          if (fn) {
+            try {
+              result = fn(args);
+              // Track what was logged
+              if (result.logged) logged.push(result.logged);
+            } catch (e) {
+              result = { error: e.message };
+            }
+          } else {
+            result = { error: `Unknown tool: ${fnName}` };
+          }
+
+          toolResults.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify(result)
+          });
+        }
+
+        // Add all tool results to context and loop
+        messages.push(...toolResults);
+
+        if (totalToolCalls >= MAX_TOOL_CALLS) {
+          console.warn('[JARVIS] Hard tool cap reached — forcing final answer');
+        }
+        continue;
+      }
+
+      if (stopReason === 'stop' || stopReason === 'length') {
+        finalResponse = assistantMsg.content || '';
+        break;
+      }
+
+      // Unexpected stop reason
+      console.warn('[JARVIS] Unexpected stop reason:', stopReason);
+      finalResponse = assistantMsg.content || 'Systems nominal.';
+      break;
     }
 
-    if (logged.length > 0) console.log('[CHAT] Logged:', logged.join(', '));
+    if (!finalResponse) finalResponse = 'Processing complete.';
+    if (logged.length > 0) console.log('[JARVIS] Logged:', logged.join(', '));
 
-    res.json({ response, logged, actions });
+    res.json({ response: finalResponse, logged, actions: [] });
 
   } catch (e) {
     console.error('[CHAT] Error:', e.message);
@@ -1070,23 +1382,11 @@ async function handleJarvisMessage(chat_id, userText, from = 'Jack') {
   const fetch = require('node-fetch');
   const history = getHistory(chat_id);
 
-  // Inject live snapshot context for richer responses
-  let snapshotContext = '';
-  try {
-    const snap = await fetch(`http://localhost:3000/api/dashboard`).then(r => r.json());
-    const s = snap.snapshot || {};
-    const act = s.activity || {};
-    snapshotContext = `\n\nCURRENT LIVE DATA: HRV=${s.hrv||'?'}ms, RestingHR=${s.resting_hr||'?'}bpm, Steps=${act.steps||'?'}, SpO2=${s.spo2||'?'}%, Score=${snap.score?.overall||'?'}/100, Sleep=${s.sleep?.total_minutes ? Math.floor(s.sleep.total_minutes/60)+'h'+s.sleep.total_minutes%60+'m' : '?'}`;
-  } catch {}
-
-  const chatRes = await fetch(`http://localhost:3000/api/chat`, {
+  // JARVIS now queries live data via tools — no need to pre-inject snapshot
+  const chatRes = await fetch(`http://localhost:${process.env.PORT || 3000}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message: userText,
-      history,
-      contextExtra: snapshotContext
-    })
+    body: JSON.stringify({ message: userText, history })
   }).then(r => r.json());
 
   const reply = chatRes.response || 'Understood.';
