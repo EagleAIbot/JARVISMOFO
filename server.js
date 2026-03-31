@@ -975,6 +975,104 @@ Return ONLY valid JSON. No markdown, no explanation outside the JSON.`;
   }
 });
 
+// ─── Telegram Bot Webhook ─────────────────────────────────────────────────────
+
+const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}`;
+
+async function tgSend(chat_id, text, parse_mode = 'Markdown') {
+  const fetch = require('node-fetch');
+  await fetch(`${TELEGRAM_API}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id, text, parse_mode })
+  });
+}
+
+async function tgTyping(chat_id) {
+  const fetch = require('node-fetch');
+  await fetch(`${TELEGRAM_API}/sendChatAction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id, action: 'typing' })
+  });
+}
+
+app.post('/api/telegram', async (req, res) => {
+  res.sendStatus(200); // Always ack Telegram immediately
+
+  try {
+    const { message } = req.body;
+    if (!message || !message.text) return;
+
+    const chat_id = message.chat.id;
+    const text = message.text.trim();
+    const from = message.from?.first_name || 'Jack';
+
+    // Security: only respond to Jack's account (optional but recommended)
+    // Uncomment and set your Telegram user ID to lock the bot to just you:
+    // const JACK_TELEGRAM_ID = process.env.TELEGRAM_USER_ID;
+    // if (JACK_TELEGRAM_ID && String(message.from?.id) !== JACK_TELEGRAM_ID) {
+    //   await tgSend(chat_id, '⛔ Unauthorised.');
+    //   return;
+    // }
+
+    // Handle /start command
+    if (text === '/start') {
+      await tgSend(chat_id, `*J.A.R.V.I.S. ONLINE* ⚡\n\nGood. All systems operational, ${from}.\n\nTell me about your day — food, training, how you're feeling. I'll log everything automatically.\n\nYou can also ask me things like:\n• _"what's my HRV today?"_\n• _"how are my gut symptoms trending?"_\n• _"log 99kg this morning"`);
+      return;
+    }
+
+    // Handle /status command
+    if (text === '/status') {
+      try {
+        const fetch = require('node-fetch');
+        const snap = await fetch(`http://localhost:3000/api/dashboard`).then(r => r.json());
+        const s = snap.snapshot || {};
+        const score = snap.score?.overall || '--';
+        const act = s.activity || {};
+        const statusMsg = `*JARVIS STATUS* — ${new Date().toLocaleDateString('en-GB')}\n\n` +
+          `⚡ *Score:* ${score}/100\n` +
+          `💓 *Resting HR:* ${s.resting_hr || '--'} bpm\n` +
+          `🫀 *HRV:* ${s.hrv || '--'} ms\n` +
+          `😴 *Sleep:* ${s.sleep?.total_minutes ? Math.floor(s.sleep.total_minutes/60)+'h '+s.sleep.total_minutes%60+'m' : '--'}\n` +
+          `👟 *Steps:* ${act.steps?.toLocaleString() || '--'}\n` +
+          `🩺 *SpO2:* ${s.spo2 || '--'}%\n\n` +
+          `_Dashboard: https://jarvis.rockellstech.com_`;
+        await tgSend(chat_id, statusMsg);
+      } catch (e) {
+        await tgSend(chat_id, '⚠️ Could not fetch status right now.');
+      }
+      return;
+    }
+
+    // Show typing indicator
+    await tgTyping(chat_id);
+
+    // Route through JARVIS chat logic
+    const fetch = require('node-fetch');
+    const chatRes = await fetch(`http://localhost:3000/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, history: [] })
+    }).then(r => r.json());
+
+    const reply = chatRes.response || 'Understood.';
+    const logged = chatRes.logged || [];
+
+    // Format response with logged items
+    let fullReply = reply;
+    if (logged.length > 0) {
+      fullReply += '\n\n' + logged.map(l => `✓ _${l}_`).join('\n');
+    }
+
+    await tgSend(chat_id, fullReply);
+    console.log(`[TELEGRAM] ${from}: "${text.slice(0,50)}" → logged: ${logged.join(', ') || 'none'}`);
+
+  } catch (e) {
+    console.error('[TELEGRAM] Error:', e.message);
+  }
+});
+
 // ─── Serve frontend ──────────────────────────────────────────────────────────
 
 app.get('*', (req, res) => {
