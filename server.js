@@ -826,7 +826,7 @@ cron.schedule('0 8 * * 0', async () => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, history = [] } = req.body;
+    const { message, history = [], contextExtra = '' } = req.body;
     if (!message) return res.status(400).json({ error: 'No message provided' });
 
     const fetch = require('node-fetch');
@@ -840,7 +840,7 @@ When Jack tells you about his day, you:
 2. Log it by returning structured actions
 3. Respond conversationally like the real JARVIS — concise, intelligent, slightly dry
 
-TODAY'S DATE: ${today}
+TODAY'S DATE: ${today}${contextExtra}
 
 You can log the following action types. Return a JSON object with:
 - "response": your conversational reply to Jack (1-3 sentences max, JARVIS-style)
@@ -979,97 +979,301 @@ Return ONLY valid JSON. No markdown, no explanation outside the JSON.`;
 
 const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_TOKEN}`;
 
-async function tgSend(chat_id, text, parse_mode = 'Markdown') {
+// Per-chat conversation memory (persists across restarts via SQLite)
+const chatMemory = new Map(); // chat_id → [{ role, content }, ...]
+
+function getHistory(chat_id) {
+  if (!chatMemory.has(chat_id)) {
+    // Try to load from DB
+    try {
+      const row = db.getDb().prepare('SELECT history_json FROM telegram_memory WHERE chat_id = ?').get(String(chat_id));
+      chatMemory.set(chat_id, row ? JSON.parse(row.history_json) : []);
+    } catch { chatMemory.set(chat_id, []); }
+  }
+  return chatMemory.get(chat_id);
+}
+
+function saveHistory(chat_id, history) {
+  chatMemory.set(chat_id, history);
+  try {
+    const json = JSON.stringify(history.slice(-20));
+    db.getDb().exec(`CREATE TABLE IF NOT EXISTS telegram_memory (chat_id TEXT PRIMARY KEY, history_json TEXT, updated_at TEXT)`);
+    db.getDb().prepare(`INSERT INTO telegram_memory (chat_id, history_json, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(chat_id) DO UPDATE SET history_json=excluded.history_json, updated_at=excluded.updated_at`)
+      .run(String(chat_id), json, new Date().toISOString());
+  } catch(e) { console.error('[TG] Memory save failed:', e.message); }
+}
+
+async function tgSend(chat_id, text, extra = {}) {
   const fetch = require('node-fetch');
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id, text, parse_mode })
-  });
+  try {
+    await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, text, parse_mode: 'Markdown', ...extra })
+    });
+  } catch(e) { console.error('[TG] Send failed:', e.message); }
 }
 
 async function tgTyping(chat_id) {
   const fetch = require('node-fetch');
-  await fetch(`${TELEGRAM_API}/sendChatAction`, {
+  try {
+    await fetch(`${TELEGRAM_API}/sendChatAction`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id, action: 'typing' })
+    });
+  } catch {}
+}
+
+async function tgAnswer(callback_query_id) {
+  const fetch = require('node-fetch');
+  try {
+    await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id })
+    });
+  } catch {}
+}
+
+async function transcribeVoice(file_id) {
+  const fetch = require('node-fetch');
+  // Get file path from Telegram
+  const fileInfo = await fetch(`${TELEGRAM_API}/getFile?file_id=${file_id}`).then(r => r.json());
+  if (!fileInfo.ok) throw new Error('Could not get file info');
+  const filePath = fileInfo.result.file_path;
+  const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${filePath}`;
+
+  // Download audio
+  const audioRes = await fetch(fileUrl);
+  const audioBuffer = await audioRes.buffer();
+
+  // Send to Whisper
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('file', audioBuffer, { filename: 'voice.ogg', contentType: 'audio/ogg' });
+  form.append('model', 'whisper-1');
+  form.append('language', 'en');
+
+  const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, ...form.getHeaders() },
+    body: form
+  }).then(r => r.json());
+
+  if (whisperRes.error) throw new Error(whisperRes.error.message);
+  return whisperRes.text;
+}
+
+async function handleJarvisMessage(chat_id, userText, from = 'Jack') {
+  const fetch = require('node-fetch');
+  const history = getHistory(chat_id);
+
+  // Inject live snapshot context for richer responses
+  let snapshotContext = '';
+  try {
+    const snap = await fetch(`http://localhost:3000/api/dashboard`).then(r => r.json());
+    const s = snap.snapshot || {};
+    const act = s.activity || {};
+    snapshotContext = `\n\nCURRENT LIVE DATA: HRV=${s.hrv||'?'}ms, RestingHR=${s.resting_hr||'?'}bpm, Steps=${act.steps||'?'}, SpO2=${s.spo2||'?'}%, Score=${snap.score?.overall||'?'}/100, Sleep=${s.sleep?.total_minutes ? Math.floor(s.sleep.total_minutes/60)+'h'+s.sleep.total_minutes%60+'m' : '?'}`;
+  } catch {}
+
+  const chatRes = await fetch(`http://localhost:3000/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id, action: 'typing' })
-  });
+    body: JSON.stringify({
+      message: userText,
+      history,
+      contextExtra: snapshotContext
+    })
+  }).then(r => r.json());
+
+  const reply = chatRes.response || 'Understood.';
+  const logged = chatRes.logged || [];
+
+  // Update memory
+  history.push({ role: 'user', content: userText });
+  history.push({ role: 'assistant', content: reply });
+  saveHistory(chat_id, history.slice(-20));
+
+  // Format Telegram response
+  let msg = reply;
+  if (logged.length > 0) {
+    msg += '\n\n' + logged.map(l => `✅ _${l}_`).join('\n');
+  }
+
+  // Quick action keyboard after logging
+  const keyboard = logged.length > 0 ? {
+    inline_keyboard: [[
+      { text: '📊 View Status', callback_data: 'status' },
+      { text: '💬 More detail', callback_data: 'more' }
+    ]]
+  } : undefined;
+
+  await tgSend(chat_id, msg, keyboard ? { reply_markup: keyboard } : {});
+  console.log(`[TG] ${from}: "${userText.slice(0,60)}" → logged: ${logged.join(', ') || 'none'}`);
 }
 
 app.post('/api/telegram', async (req, res) => {
-  res.sendStatus(200); // Always ack Telegram immediately
+  res.sendStatus(200);
 
   try {
-    const { message } = req.body;
-    if (!message || !message.text) return;
+    const update = req.body;
 
-    const chat_id = message.chat.id;
-    const text = message.text.trim();
-    const from = message.from?.first_name || 'Jack';
+    // Handle callback_query (inline button presses)
+    if (update.callback_query) {
+      const cq = update.callback_query;
+      await tgAnswer(cq.id);
+      const chat_id = cq.message.chat.id;
 
-    // Security: only respond to Jack's account (optional but recommended)
-    // Uncomment and set your Telegram user ID to lock the bot to just you:
-    // const JACK_TELEGRAM_ID = process.env.TELEGRAM_USER_ID;
-    // if (JACK_TELEGRAM_ID && String(message.from?.id) !== JACK_TELEGRAM_ID) {
-    //   await tgSend(chat_id, '⛔ Unauthorised.');
-    //   return;
-    // }
-
-    // Handle /start command
-    if (text === '/start') {
-      await tgSend(chat_id, `*J.A.R.V.I.S. ONLINE* ⚡\n\nGood. All systems operational, ${from}.\n\nTell me about your day — food, training, how you're feeling. I'll log everything automatically.\n\nYou can also ask me things like:\n• _"what's my HRV today?"_\n• _"how are my gut symptoms trending?"_\n• _"log 99kg this morning"`);
-      return;
-    }
-
-    // Handle /status command
-    if (text === '/status') {
-      try {
+      if (cq.data === 'status') {
         const fetch = require('node-fetch');
         const snap = await fetch(`http://localhost:3000/api/dashboard`).then(r => r.json());
         const s = snap.snapshot || {};
-        const score = snap.score?.overall || '--';
         const act = s.activity || {};
-        const statusMsg = `*JARVIS STATUS* — ${new Date().toLocaleDateString('en-GB')}\n\n` +
-          `⚡ *Score:* ${score}/100\n` +
-          `💓 *Resting HR:* ${s.resting_hr || '--'} bpm\n` +
-          `🫀 *HRV:* ${s.hrv || '--'} ms\n` +
-          `😴 *Sleep:* ${s.sleep?.total_minutes ? Math.floor(s.sleep.total_minutes/60)+'h '+s.sleep.total_minutes%60+'m' : '--'}\n` +
-          `👟 *Steps:* ${act.steps?.toLocaleString() || '--'}\n` +
-          `🩺 *SpO2:* ${s.spo2 || '--'}%\n\n` +
-          `_Dashboard: https://jarvis.rockellstech.com_`;
-        await tgSend(chat_id, statusMsg);
-      } catch (e) {
-        await tgSend(chat_id, '⚠️ Could not fetch status right now.');
+        const score = snap.score?.overall || '--';
+        const pillars = snap.score?.pillars || {};
+        const pillarEmoji = { recovery: '💤', physical: '🏋️', metabolic: '🔥', gut: '🫁', longevity: '🧬', cognitive: '🧠', hormonal: '⚗️', mind: '🧘' };
+        let pillarStr = Object.entries(pillars).map(([k,v]) => `${pillarEmoji[k]||'•'} ${k}: ${v||'--'}`).join('\n');
+
+        await tgSend(chat_id,
+          `*⚡ JARVIS STATUS — ${new Date().toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'})}*\n\n` +
+          `🎯 *Superhuman Score: ${score}/100*\n\n` +
+          `💓 Resting HR: *${s.resting_hr||'--'} bpm*\n` +
+          `🫀 HRV: *${s.hrv||'--'} ms*\n` +
+          `😴 Sleep: *${s.sleep?.total_minutes ? Math.floor(s.sleep.total_minutes/60)+'h '+s.sleep.total_minutes%60+'m' : '--'}*\n` +
+          `👟 Steps: *${act.steps?.toLocaleString()||'--'}*\n` +
+          `🩺 SpO2: *${s.spo2||'--'}%*\n\n` +
+          `*PILLARS*\n${pillarStr}\n\n` +
+          `_[Open Dashboard](https://jarvis.rockellstech.com)_`
+        );
+      } else if (cq.data === 'more') {
+        await tgSend(chat_id, `Tell me more — what else happened today? Training, food, how you're feeling?`);
       }
       return;
     }
 
-    // Show typing indicator
-    await tgTyping(chat_id);
+    const message = update.message;
+    if (!message) return;
 
-    // Route through JARVIS chat logic
-    const fetch = require('node-fetch');
-    const chatRes = await fetch(`http://localhost:3000/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, history: [] })
-    }).then(r => r.json());
+    const chat_id = message.chat.id;
+    const from = message.from?.first_name || 'Jack';
 
-    const reply = chatRes.response || 'Understood.';
-    const logged = chatRes.logged || [];
-
-    // Format response with logged items
-    let fullReply = reply;
-    if (logged.length > 0) {
-      fullReply += '\n\n' + logged.map(l => `✓ _${l}_`).join('\n');
+    // /start
+    if (message.text === '/start') {
+      saveHistory(chat_id, []); // Reset memory on /start
+      await tgSend(chat_id,
+        `*J.A.R.V.I.S. ONLINE* ⚡\n\n` +
+        `Good. All systems operational, ${from}.\n\n` +
+        `Just talk to me naturally — I'll log everything:\n` +
+        `• _"had chicken and rice for lunch"_ → logs diet\n` +
+        `• _"feeling bloated 6/10 today"_ → logs gut\n` +
+        `• _"45 min zone 2 bike session"_ → logs workout\n` +
+        `• _"weighed 99.2kg this morning"_ → logs body comp\n\n` +
+        `🎙 *Voice messages work too.*\n\n` +
+        `Commands: /status /summary /clear`,
+        { reply_markup: { inline_keyboard: [[{ text: '📊 Check Status Now', callback_data: 'status' }]] } }
+      );
+      return;
     }
 
-    await tgSend(chat_id, fullReply);
-    console.log(`[TELEGRAM] ${from}: "${text.slice(0,50)}" → logged: ${logged.join(', ') || 'none'}`);
+    // /status
+    if (message.text === '/status') {
+      await tgTyping(chat_id);
+      // Trigger via callback handler
+      const fakeUpdate = { callback_query: { id: 'manual', data: 'status', message: { chat: { id: chat_id } } } };
+      req.body = fakeUpdate;
+      // Direct call
+      const fetch = require('node-fetch');
+      const snap = await fetch(`http://localhost:3000/api/dashboard`).then(r => r.json());
+      const s = snap.snapshot || {};
+      const act = s.activity || {};
+      await tgSend(chat_id,
+        `*⚡ JARVIS STATUS*\n\n` +
+        `🎯 Score: *${snap.score?.overall||'--'}/100*\n` +
+        `💓 HR: *${s.resting_hr||'--'} bpm* | 🫀 HRV: *${s.hrv||'--'} ms*\n` +
+        `😴 Sleep: *${s.sleep?.total_minutes ? Math.floor(s.sleep.total_minutes/60)+'h '+s.sleep.total_minutes%60+'m' : '--'}*\n` +
+        `👟 Steps: *${act.steps?.toLocaleString()||'--'}* | 🩺 SpO2: *${s.spo2||'--'}%*\n\n` +
+        `_[Open Dashboard](https://jarvis.rockellstech.com)_`
+      );
+      return;
+    }
+
+    // /summary — weekly overview
+    if (message.text === '/summary') {
+      await tgTyping(chat_id);
+      const fetch = require('node-fetch');
+      const stats = await fetch(`http://localhost:3000/api/weekly-stats`).then(r => r.json()).catch(() => null);
+      await tgSend(chat_id, `*Weekly summary coming soon* — check the full dashboard at [jarvis.rockellstech.com](https://jarvis.rockellstech.com)`);
+      return;
+    }
+
+    // /clear — reset memory
+    if (message.text === '/clear') {
+      saveHistory(chat_id, []);
+      await tgSend(chat_id, `Memory cleared. Fresh start, ${from}.`);
+      return;
+    }
+
+    // Skip other commands
+    if (message.text?.startsWith('/')) return;
+
+    await tgTyping(chat_id);
+
+    // Voice message → transcribe with Whisper
+    if (message.voice || message.audio) {
+      const file_id = (message.voice || message.audio).file_id;
+      try {
+        await tgSend(chat_id, `🎙 _Transcribing..._`);
+        const transcript = await transcribeVoice(file_id);
+        await tgSend(chat_id, `🎙 _"${transcript}"_`);
+        await handleJarvisMessage(chat_id, transcript, from);
+      } catch (e) {
+        console.error('[TG] Voice transcription failed:', e.message);
+        await tgSend(chat_id, `⚠️ Couldn't transcribe that. Try typing it instead.`);
+      }
+      return;
+    }
+
+    // Regular text message
+    if (message.text) {
+      await handleJarvisMessage(chat_id, message.text, from);
+    }
 
   } catch (e) {
     console.error('[TELEGRAM] Error:', e.message);
+  }
+});
+
+// ─── Telegram daily proactive reminders ──────────────────────────────────────
+// Runs at 8am and 9pm to check in with Jack
+
+function getTelegramChatIds() {
+  try {
+    db.getDb().exec(`CREATE TABLE IF NOT EXISTS telegram_memory (chat_id TEXT PRIMARY KEY, history_json TEXT, updated_at TEXT)`);
+    return db.getDb().prepare('SELECT chat_id FROM telegram_memory').all().map(r => r.chat_id);
+  } catch { return []; }
+}
+
+// 8:00am morning check-in
+cron.schedule('0 8 * * *', async () => {
+  const chatIds = getTelegramChatIds();
+  for (const chat_id of chatIds) {
+    await tgSend(chat_id,
+      `*⚡ Good morning.* JARVIS online.\n\nQuick check-in — how did you sleep, and what's the weight today?\n\nJust reply naturally.`,
+      { reply_markup: { inline_keyboard: [[{ text: '📊 View Status', callback_data: 'status' }]] } }
+    );
+  }
+});
+
+// 9:00pm evening check-in
+cron.schedule('0 21 * * *', async () => {
+  const chatIds = getTelegramChatIds();
+  for (const chat_id of chatIds) {
+    await tgSend(chat_id,
+      `*🌙 Evening check-in.* How was today?\n\nGut symptoms? What did you eat? Anything worth noting for the record?`
+    );
   }
 });
 
