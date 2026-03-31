@@ -1,0 +1,7 @@
+node_modules/
+.env
+health.db
+health.db-shm
+health.db-wal
+export.xml
+*.zip

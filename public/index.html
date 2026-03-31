@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>J.A.R.V.I.S. — Personal Health OS</title>
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+<!-- Boot sequence overlay -->
+<div id="boot-overlay">
+  <div style="text-align:center">
+    <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom:20px">
+      <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(0,229,255,0.2)" stroke-width="1"/>
+      <circle cx="40" cy="40" r="28" fill="none" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
+      <circle cx="40" cy="40" r="20" fill="none" stroke="rgba(0,229,255,0.5)" stroke-width="1.5"/>
+      <circle cx="40" cy="40" r="10" fill="rgba(0,229,255,0.15)" stroke="#00e5ff" stroke-width="2"/>
+      <circle cx="40" cy="40" r="4" fill="#00e5ff" style="filter:drop-shadow(0 0 6px #00e5ff)"/>
+      <circle cx="40" cy="40" r="36" fill="none" stroke="#00e5ff" stroke-width="1.5"
+        stroke-dasharray="226" stroke-dashoffset="226"
+        transform="rotate(-90 40 40)"
+        style="animation: arc-boot 1.5s ease forwards; stroke-dashoffset:0">
+      </circle>
+    </svg>
+    <div class="boot-text" style="animation-delay:0.1s;font-size:16px;font-family:'Orbitron',monospace;letter-spacing:0.3em;color:#00e5ff;text-shadow:0 0 20px rgba(0,229,255,0.8)">J.A.R.V.I.S.</div>
+    <div class="boot-text" style="animation-delay:0.4s">INITIALIZING PERSONAL HEALTH OS...</div>
+    <div class="boot-text" style="animation-delay:0.7s">LOADING APPLE HEALTH DATA BRIDGE...</div>
+    <div class="boot-text" style="animation-delay:1.0s">CONNECTING TO SQLITE DATABASE...</div>
+    <div class="boot-text" style="animation-delay:1.3s">CALIBRATING SUPERHUMAN SCORE ENGINE...</div>
+    <div class="boot-text" style="animation-delay:1.7s;color:rgba(0,255,136,0.9)">ALL SYSTEMS NOMINAL — WELCOME, JACK.</div>
+  </div>
+</div>
+
+<canvas id="hex-canvas"></canvas>
+<canvas id="particle-canvas"></canvas>
+
+<!-- Mobile header (visible < 900px) -->
+<div id="mobile-header">
+  <button id="hamburger" aria-label="Open navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="mobile-logo">
+    <svg width="22" height="22" viewBox="0 0 32 32">
+      <polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="none" stroke="#00e5ff" stroke-width="1.5" opacity="0.8" style="filter:drop-shadow(0 0 4px rgba(0,229,255,0.8))"/>
+      <circle cx="16" cy="16" r="4" fill="#00e5ff" style="filter:drop-shadow(0 0 6px #00e5ff)"/>
+    </svg>
+    J.A.R.V.I.S.
+  </div>
+  <div class="mobile-score-badge" id="mobile-score">--</div>
+</div>
+<div id="sidebar-overlay"></div>
+
+<div id="app">
+  <!-- ─── Sidebar ─────────────────────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <svg class="logo-hex" width="32" height="32" viewBox="0 0 32 32">
+          <polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="none" stroke="#00e5ff" stroke-width="1.5" opacity="0.8" style="filter:drop-shadow(0 0 4px rgba(0,229,255,0.8))"/>
+          <polygon points="16,7 24,11.5 24,20.5 16,25 8,20.5 8,11.5" fill="rgba(0,229,255,0.08)" stroke="#00e5ff" stroke-width="1" opacity="0.5"/>
+          <circle cx="16" cy="16" r="4" fill="#00e5ff" style="filter:drop-shadow(0 0 6px #00e5ff)"/>
+        </svg>
+        <span class="logo-text">J.A.R.V.I.S.</span>
+      </div>
+      <div class="logo-sub">Personal Health OS · v1.0</div>
+    </div>
+
+    <div class="sidebar-score-mini">
+      <div class="score-mini-num count-up" id="sidebar-score">--</div>
+      <div class="score-mini-label">Superhuman Score</div>
+    </div>
+
+    <nav>
+      <div class="nav-section-label">Overview</div>
+      <a class="nav-item active" data-section="command-center">
+        <span class="nav-icon">⚡</span> Command Center
+      </a>
+
+      <div class="nav-section-label">Body</div>
+      <a class="nav-item" data-section="vitals">
+        <span class="nav-icon">💓</span> Vitals
+      </a>
+      <a class="nav-item" data-section="performance">
+        <span class="nav-icon">🏋️</span> Performance
+      </a>
+      <a class="nav-item" data-section="body-comp">
+        <span class="nav-icon">⚖️</span> Body Comp
+      </a>
+      <a class="nav-item" data-section="gut">
+        <span class="nav-icon">🫁</span> Gut Tracker
+      </a>
+
+      <div class="nav-section-label">Inputs</div>
+      <a class="nav-item" data-section="diet">
+        <span class="nav-icon">🥗</span> Diet & Nutrition
+      </a>
+      <a class="nav-item" data-section="protocols">
+        <span class="nav-icon">✅</span> Protocols
+      </a>
+
+      <div class="nav-section-label">Intelligence</div>
+      <a class="nav-item" data-section="cognitive">
+        <span class="nav-icon">🧠</span> Cognitive
+      </a>
+      <a class="nav-item" data-section="labs">
+        <span class="nav-icon">🧬</span> Lab Results
+      </a>
+      <a class="nav-item" data-section="correlations">
+        <span class="nav-icon">🔗</span> Correlations
+      </a>
+      <a class="nav-item" data-section="experiments">
+        <span class="nav-icon">🔬</span> Experiments
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span class="status-dot teal"></span> System online · <span id="last-updated">--</span>
+    </div>
+  </aside>
+
+  <!-- ─── Main Content ──────────────────────────────────────────────── -->
+  <main id="main">
+
+    <!-- ══ 1. COMMAND CENTER ══════════════════════════════════════════ -->
+    <section id="section-command-center" class="section active">
+      <div class="section-header">
+        <h1 class="section-title">Command Center</h1>
+        <span class="section-subtitle" id="today-date">Loading...</span>
+        <div class="header-live">
+          <span class="status-dot teal"></span> LIVE · <span id="live-clock">--:--:--</span>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="generateBriefing()">⚡ Generate Briefing</button>
+      </div>
+
+      <!-- Alerts -->
+      <div id="alerts-container" class="mb-4"></div>
+
+      <!-- JARVIS Briefing -->
+      <div id="jarvis-briefing" class="mb-4">
+        <div class="jarvis-header">
+          <div class="jarvis-icon">⚡</div>
+          <span class="jarvis-title">JARVIS Daily Briefing</span>
+          <span class="jarvis-timestamp" id="briefing-time">--</span>
+        </div>
+        <p class="jarvis-text" id="briefing-text">Loading briefing...</p>
+      </div>
+
+      <!-- Arc Reactor + 8 Pillars -->
+      <div class="grid-2 mb-6" style="align-items: start;">
+        <div class="card card-accent" style="text-align:center; padding:24px 16px;">
+          <div class="card-title">Superhuman Score</div>
+          <div id="score-container">
+            <svg id="score-arc-svg" width="220" height="220" viewBox="0 0 220 220">
+              <defs>
+                <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="4" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                <filter id="glow-soft">
+                  <feGaussianBlur stdDeviation="2" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                <linearGradient id="arc-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" style="stop-color:#0088ff"/>
+                  <stop offset="100%" style="stop-color:#00e5ff"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Decorative outer rings -->
+              <circle cx="110" cy="110" r="104" fill="none" stroke="rgba(0,100,200,0.15)" stroke-width="1"/>
+              <circle cx="110" cy="110" r="100" fill="none" stroke="rgba(0,150,255,0.1)" stroke-width="0.5"/>
+
+              <!-- Outer tick marks -->
+              <g id="tick-marks" opacity="0.3">
+                <line x1="110" y1="7" x2="110" y2="16" stroke="#00e5ff" stroke-width="1" transform="rotate(0 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(30 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(60 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="16" stroke="#00e5ff" stroke-width="1" transform="rotate(90 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(120 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(150 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="16" stroke="#00e5ff" stroke-width="1" transform="rotate(180 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(210 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(240 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="16" stroke="#00e5ff" stroke-width="1" transform="rotate(270 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(300 110 110)"/>
+                <line x1="110" y1="7" x2="110" y2="12" stroke="#00e5ff" stroke-width="0.5" transform="rotate(330 110 110)"/>
+              </g>
+
+              <!-- Outer rotating ring 1 (slow CCW) -->
+              <circle cx="110" cy="110" r="94" fill="none" stroke="rgba(0,200,255,0.08)" stroke-width="1"/>
+              <circle cx="110" cy="110" r="94" fill="none" stroke="rgba(0,200,255,0.25)" stroke-width="1"
+                stroke-dasharray="6 18" stroke-linecap="round" transform="rotate(0 110 110)">
+                <animateTransform attributeName="transform" type="rotate" from="0 110 110" to="-360 110 110" dur="20s" repeatCount="indefinite"/>
+              </circle>
+
+              <!-- Inner rotating ring 2 (faster CW) -->
+              <circle cx="110" cy="110" r="84" fill="none" stroke="rgba(0,150,255,0.15)" stroke-width="1"/>
+              <circle cx="110" cy="110" r="84" fill="none" stroke="rgba(0,150,255,0.35)" stroke-width="1.5"
+                stroke-dasharray="3 9" stroke-linecap="round">
+                <animateTransform attributeName="transform" type="rotate" from="0 110 110" to="360 110 110" dur="12s" repeatCount="indefinite"/>
+              </circle>
+
+              <!-- Score track -->
+              <circle cx="110" cy="110" r="75" fill="none" stroke="rgba(0,50,100,0.6)" stroke-width="10"/>
+
+              <!-- Score arc (main) -->
+              <circle id="score-arc" cx="110" cy="110" r="75" fill="none" stroke="url(#arc-grad)" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="471" stroke-dashoffset="471"
+                transform="rotate(-90 110 110)" filter="url(#glow-cyan)"
+                style="transition: stroke-dashoffset 1.4s cubic-bezier(0.4,0,0.2,1)"/>
+
+              <!-- Score arc highlight glow -->
+              <circle cx="110" cy="110" r="75" fill="none" stroke="rgba(0,229,255,0.2)" stroke-width="20"
+                stroke-linecap="round" stroke-dasharray="471" stroke-dashoffset="471"
+                id="score-arc-glow" transform="rotate(-90 110 110)"
+                style="transition: stroke-dashoffset 1.4s cubic-bezier(0.4,0,0.2,1)"/>
+
+              <!-- Inner hex decoration -->
+              <polygon points="110,76 127,85.5 127,104.5 110,114 93,104.5 93,85.5" fill="rgba(0,100,200,0.08)" stroke="rgba(0,200,255,0.2)" stroke-width="1"/>
+              <polygon points="110,82 121,88.5 121,101.5 110,108 99,101.5 99,88.5" fill="rgba(0,80,160,0.1)" stroke="rgba(0,200,255,0.15)" stroke-width="0.5"/>
+
+              <!-- Arc reactor core (pulsing) -->
+              <circle cx="110" cy="110" r="28" fill="rgba(0,40,100,0.4)" stroke="rgba(0,200,255,0.25)" stroke-width="1"/>
+              <circle cx="110" cy="110" r="20" fill="rgba(0,30,80,0.6)" stroke="rgba(0,200,255,0.4)" stroke-width="1.5">
+                <animate attributeName="r" values="20;22;20" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="110" cy="110" r="12" fill="rgba(0,150,255,0.2)">
+                <animate attributeName="fill" values="rgba(0,150,255,0.2);rgba(0,229,255,0.4);rgba(0,150,255,0.2)" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="110" cy="110" r="6" fill="#00e5ff">
+                <animate attributeName="r" values="6;7;6" dur="1.5s" repeatCount="indefinite"/>
+              </circle>
+
+              <!-- Score text -->
+              <text x="110" y="104" class="score-text score-main" id="score-number">--</text>
+              <text x="110" y="120" class="score-text score-label">SUPERHUMAN SCORE</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">8 Performance Pillars</div>
+          <div id="pillars-grid" style="grid-template-columns: repeat(4,1fr);">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Vitals Strip -->
+      <div id="vitals-strip" class="mb-6">
+        <div class="ticker-item">
+          <div class="ticker-label"><span class="ticker-dot"></span>Resting HR</div>
+          <div><span class="ticker-value" id="tick-rhr">--</span><span class="ticker-unit">bpm</span></div>
+        </div>
+        <div class="ticker-item">
+          <div class="ticker-label"><span class="ticker-dot"></span>HRV</div>
+          <div><span class="ticker-value" id="tick-hrv">--</span><span class="ticker-unit">ms</span></div>
+        </div>
+        <div class="ticker-item">
+          <div class="ticker-label"><span class="ticker-dot"></span>Sleep</div>
+          <div><span class="ticker-value" id="tick-sleep">--</span><span class="ticker-unit">hrs</span></div>
+        </div>
+        <div class="ticker-item">
+          <div class="ticker-label"><span class="ticker-dot"></span>Steps</div>
+          <div><span class="ticker-value" id="tick-steps">--</span><span class="ticker-unit">today</span></div>
+        </div>
+        <div class="ticker-item">
+          <div class="ticker-label"><span class="ticker-dot"></span>SpO2</div>
+          <div><span class="ticker-value" id="tick-spo2">--</span><span class="ticker-unit">%</span></div>
+        </div>
+        <div class="ticker-item">
+          <div class="ticker-label"><span class="ticker-dot"></span>Gut Score</div>
+          <div><span class="ticker-value" id="tick-gut">--</span><span class="ticker-unit">/100</span></div>
+        </div>
+      </div>
+
+      <!-- Protocol Checklist -->
+      <div class="card card-accent">
+        <div class="card-title">Daily Protocol — Blueprint</div>
+        <div class="grid-2">
+          <div>
+            <div class="protocol-section-label">☀️ Morning</div>
+            <div id="protocol-morning"></div>
+          </div>
+          <div>
+            <div class="protocol-section-label">🌙 Evening</div>
+            <div id="protocol-evening"></div>
+          </div>
+        </div>
+        <div class="protocol-progress-bar mt-4">
+          <div class="protocol-progress-fill" id="protocol-progress" style="width:0%"></div>
+        </div>
+        <div class="text-xs text-mono text-dim mt-2" id="protocol-pct">0 / 0 completed</div>
+      </div>
+    </section>
+
+    <!-- ══ 2. VITALS ══════════════════════════════════════════════════ -->
+    <section id="section-vitals" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Vitals</h1>
+        <span class="section-subtitle">Apple Watch · 30-day window</span>
+      </div>
+
+      <div class="grid-4 mb-6">
+        <div class="card card-accent">
+          <div class="card-title">HRV (RMSSD)</div>
+          <div class="metric-big count-up" id="v-hrv">--</div>
+          <div class="metric-unit">ms</div>
+          <div class="metric-trend trend-stable" id="v-hrv-trend">vs baseline: --</div>
+        </div>
+        <div class="card card-accent-blue">
+          <div class="card-title">Resting HR</div>
+          <div class="metric-big blue count-up" id="v-rhr">--</div>
+          <div class="metric-unit">bpm</div>
+          <div class="metric-trend" id="v-rhr-trend">--</div>
+        </div>
+        <div class="card card-accent-amber">
+          <div class="card-title">Sleep Last Night</div>
+          <div class="metric-big amber count-up" id="v-sleep">--</div>
+          <div class="metric-unit">hrs</div>
+          <div class="metric-trend" id="v-sleep-trend">Deep: -- · REM: --</div>
+        </div>
+        <div class="card">
+          <div class="card-title">VO2 Max</div>
+          <div class="metric-big white count-up" id="v-vo2">--</div>
+          <div class="metric-unit">mL/kg/min</div>
+          <div class="metric-trend text-dim" id="v-vo2-target">Target: 55+ · Elite: 60+</div>
+        </div>
+      </div>
+
+      <!-- HRV Chart -->
+      <div class="card mb-6">
+        <div class="card-title">HRV — 30 Day Trend</div>
+        <div class="chart-wrap" style="height:180px">
+          <canvas id="hrv-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Sleep Hypnogram -->
+      <div class="card mb-6">
+        <div class="card-title">Sleep Hypnogram — Last 7 Nights</div>
+        <div class="hypnogram-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#00d4aa"></div>Deep</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>REM</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>Core</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Awake</div>
+        </div>
+        <div class="chart-wrap" style="height:200px">
+          <canvas id="hypnogram-chart"></canvas>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-6">
+        <!-- Activity Rings -->
+        <div class="card">
+          <div class="card-title">Activity Rings — Today</div>
+          <div style="display:flex; align-items:center; gap:24px;">
+            <svg id="rings-svg" width="140" height="140" viewBox="0 0 140 140">
+              <!-- Move ring -->
+              <circle cx="70" cy="70" r="52" fill="none" stroke="#1e2d4a" stroke-width="10"/>
+              <circle id="ring-move" cx="70" cy="70" r="52" fill="none" stroke="#ef4444" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="327" stroke-dashoffset="327"
+                transform="rotate(-90 70 70)" style="transition: stroke-dashoffset 1s ease"/>
+              <!-- Exercise ring -->
+              <circle cx="70" cy="70" r="38" fill="none" stroke="#1e2d4a" stroke-width="10"/>
+              <circle id="ring-exercise" cx="70" cy="70" r="38" fill="none" stroke="#10b981" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="239" stroke-dashoffset="239"
+                transform="rotate(-90 70 70)" style="transition: stroke-dashoffset 1s ease"/>
+              <!-- Stand ring -->
+              <circle cx="70" cy="70" r="24" fill="none" stroke="#1e2d4a" stroke-width="10"/>
+              <circle id="ring-stand" cx="70" cy="70" r="24" fill="none" stroke="#3b82f6" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="151" stroke-dashoffset="151"
+                transform="rotate(-90 70 70)" style="transition: stroke-dashoffset 1s ease"/>
+            </svg>
+            <div>
+              <div class="mb-3">
+                <div style="font-size:11px;color:#ef4444;font-family:var(--mono);">● MOVE</div>
+                <div style="font-size:22px;font-family:var(--mono);color:var(--text);"><span id="ring-move-val">--</span> kcal</div>
+              </div>
+              <div class="mb-3">
+                <div style="font-size:11px;color:var(--green);font-family:var(--mono);">● EXERCISE</div>
+                <div style="font-size:22px;font-family:var(--mono);color:var(--text);"><span id="ring-ex-val">--</span> min</div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--blue);font-family:var(--mono);">● STAND</div>
+                <div style="font-size:22px;font-family:var(--mono);color:var(--text);"><span id="ring-stand-val">--</span> hrs</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resting HR Trend -->
+        <div class="card">
+          <div class="card-title">Resting HR — 30 Day Trend</div>
+          <div class="chart-wrap" style="height:140px">
+            <canvas id="rhr-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">SpO2 — Nightly</div>
+          <div class="chart-wrap" style="height:120px">
+            <canvas id="spo2-chart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Wrist Temperature Deviation</div>
+          <div class="chart-wrap" style="height:120px">
+            <canvas id="temp-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 3. PERFORMANCE ════════════════════════════════════════════ -->
+    <section id="section-performance" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Performance</h1>
+        <span class="section-subtitle">Zone 2 · VO2 max · Strength · Training Load</span>
+      </div>
+
+      <!-- Zone 2 + VO2 stats -->
+      <div class="grid-4 mb-6">
+        <div class="card card-accent">
+          <div class="card-title">Zone 2 This Week</div>
+          <div class="metric-big count-up" id="p-zone2">0.0</div>
+          <div class="metric-unit">hrs</div>
+          <div class="metric-trend" id="p-zone2-status">Target: 3+ hrs · Optimal: 4+ hrs</div>
+        </div>
+        <div class="card">
+          <div class="card-title">VO2 Max (Apple Watch)</div>
+          <div class="metric-big white count-up" id="p-vo2">--</div>
+          <div class="metric-unit">mL/kg/min</div>
+          <div class="metric-trend text-dim">Elite (25yr): 60+</div>
+        </div>
+        <div class="card card-accent-blue">
+          <div class="card-title">Workouts This Week</div>
+          <div class="metric-big blue count-up" id="p-workouts">0</div>
+          <div class="metric-unit">sessions</div>
+          <div class="metric-trend text-dim">Target: 5–6 / week</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Training Load</div>
+          <div class="metric-big white count-up" id="p-load">--</div>
+          <div class="metric-unit">score</div>
+          <div class="metric-trend" id="p-load-status">vs 4-week avg</div>
+        </div>
+      </div>
+
+      <!-- Zone 2 12-week chart -->
+      <div class="card mb-6">
+        <div class="card-title">Zone 2 — Weekly Hours (12 Weeks)</div>
+        <div class="chart-wrap" style="height:180px">
+          <canvas id="zone2-chart"></canvas>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:8px;">
+          <div class="tag tag-amber">Min: 3 hrs/week</div>
+          <div class="tag tag-teal">Optimal: 4+ hrs/week</div>
+        </div>
+      </div>
+
+      <!-- VO2 Max vs targets -->
+      <div class="card mb-6">
+        <div class="card-title">VO2 Max Progress — Age-Normed Targets (25yr Male)</div>
+        <div style="padding:16px 0">
+          <div style="position:relative;height:32px;background:var(--bg3);border-radius:8px;overflow:hidden;">
+            <div style="position:absolute;left:0;top:0;height:100%;width:62%;background:rgba(59,130,246,0.2);border-radius:8px 0 0 8px;"></div>
+            <div style="position:absolute;left:62%;top:0;height:100%;width:10%;background:rgba(16,185,129,0.2);"></div>
+            <div style="position:absolute;left:72%;top:0;height:100%;width:28%;background:rgba(0,212,170,0.2);border-radius:0 8px 8px 0;"></div>
+            <div id="vo2-marker" style="position:absolute;top:4px;height:24px;width:3px;background:var(--teal);border-radius:2px;box-shadow:0 0 8px var(--teal-glow);transition:left 1s ease;left:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text-dim);">
+            <span>Below Avg</span><span>Average 43</span><span>Good 49</span><span>Excellent 54</span><span>Elite 60+</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log a workout -->
+      <div class="grid-2 mb-6">
+        <div class="card card-accent">
+          <div class="card-title">Log Workout</div>
+          <div class="form-row">
+            <label>Type</label>
+            <select class="input" id="w-type">
+              <option>Zone 2 Cardio</option>
+              <option>Strength Training</option>
+              <option>VO2 Max Intervals</option>
+              <option>Recovery</option>
+              <option>Running</option>
+              <option>Cycling</option>
+              <option>Swimming</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="grid-2">
+            <div class="form-row">
+              <label>Duration (min)</label>
+              <input class="input" type="number" id="w-duration" placeholder="45">
+            </div>
+            <div class="form-row">
+              <label>Avg HR (bpm)</label>
+              <input class="input" type="number" id="w-hr" placeholder="135">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Notes</label>
+            <input class="input" type="text" id="w-notes" placeholder="Felt strong, zone 2 the whole session...">
+          </div>
+          <button class="btn w-full" onclick="logWorkout()">Log Workout</button>
+        </div>
+
+        <!-- Recent workouts -->
+        <div class="card">
+          <div class="card-title">Recent Workouts</div>
+          <div id="recent-workouts">
+            <div class="empty-state">
+              <div class="empty-icon">🏋️</div>
+              <div class="empty-title">No workouts yet</div>
+              <div class="empty-desc">Log a workout or connect Apple Watch to import automatically</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cold / Sauna log -->
+      <div class="card">
+        <div class="card-title">Cold & Heat Exposure Log</div>
+        <div class="grid-3">
+          <div class="form-row">
+            <label>Type</label>
+            <select class="input" id="exposure-type">
+              <option>Cold Plunge</option>
+              <option>Cold Shower</option>
+              <option>Sauna</option>
+              <option>Contrast (Hot/Cold)</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Duration (min)</label>
+            <input class="input" type="number" id="exposure-duration" placeholder="20">
+          </div>
+          <div class="form-row">
+            <label>Temperature (°C)</label>
+            <input class="input" type="number" id="exposure-temp" placeholder="15">
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="logExposure()">Log Exposure</button>
+      </div>
+    </section>
+
+    <!-- ══ 4. GUT TRACKER ════════════════════════════════════════════ -->
+    <section id="section-gut" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Gut Tracker</h1>
+        <span class="section-subtitle">Body map · Daily log · 90-day heatmap</span>
+      </div>
+
+      <div class="grid-2 mb-6" style="align-items:start">
+        <!-- Body Map -->
+        <div id="bodymap-section"></div>
+
+        <!-- Daily Log Form -->
+        <div class="card card-accent">
+          <div class="card-title">Log Today's Gut Status</div>
+
+          <div class="form-row">
+            <label>Bristol Stool Scale</label>
+            <div class="bristol-grid" id="bristol-grid">
+              <div class="bristol-btn" data-type="1" onclick="selectBristol(1)">
+                <div class="bristol-num">1</div>
+                <div class="bristol-desc">Hard lumps</div>
+              </div>
+              <div class="bristol-btn" data-type="2" onclick="selectBristol(2)">
+                <div class="bristol-num">2</div>
+                <div class="bristol-desc">Lumpy sausage</div>
+              </div>
+              <div class="bristol-btn" data-type="3" onclick="selectBristol(3)">
+                <div class="bristol-num">3</div>
+                <div class="bristol-desc">Cracked sausage</div>
+              </div>
+              <div class="bristol-btn" data-type="4" onclick="selectBristol(4)">
+                <div class="bristol-num">4</div>
+                <div class="bristol-desc">Smooth sausage ✓</div>
+              </div>
+              <div class="bristol-btn" data-type="5" onclick="selectBristol(5)">
+                <div class="bristol-num">5</div>
+                <div class="bristol-desc">Soft blobs</div>
+              </div>
+              <div class="bristol-btn" data-type="6" onclick="selectBristol(6)">
+                <div class="bristol-num">6</div>
+                <div class="bristol-desc">Mushy</div>
+              </div>
+              <div class="bristol-btn" data-type="7" onclick="selectBristol(7)">
+                <div class="bristol-num">7</div>
+                <div class="bristol-desc">Watery</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label>Pain Severity: <span id="pain-val">0</span>/10</label>
+            <input type="range" min="0" max="10" value="0" id="gut-pain" oninput="document.getElementById('pain-val').textContent=this.value">
+          </div>
+          <div class="form-row">
+            <label>Bloating: <span id="bloat-val">0</span>/10</label>
+            <input type="range" min="0" max="10" value="0" id="gut-bloat" oninput="document.getElementById('bloat-val').textContent=this.value">
+          </div>
+          <div class="form-row">
+            <label>Gas: <span id="gas-val">0</span>/10</label>
+            <input type="range" min="0" max="10" value="0" id="gut-gas" oninput="document.getElementById('gas-val').textContent=this.value">
+          </div>
+          <div class="form-row">
+            <label>Reflux/Heartburn: <span id="reflux-val">0</span>/10</label>
+            <input type="range" min="0" max="10" value="0" id="gut-reflux" oninput="document.getElementById('reflux-val').textContent=this.value">
+          </div>
+          <div class="form-row">
+            <label>Notes</label>
+            <textarea class="input" id="gut-notes" rows="2" placeholder="Pain location, timing, triggers noticed..."></textarea>
+          </div>
+          <button class="btn w-full" onclick="logGut()">Save Gut Log</button>
+        </div>
+      </div>
+
+      <!-- Gut Score Trend -->
+      <div class="card mb-6">
+        <div class="card-title">Gut Score — 30 Day Trend</div>
+        <div class="chart-wrap" style="height:160px">
+          <canvas id="gut-trend-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Symptom Heatmap -->
+      <div class="card">
+        <div class="card-title">90-Day Symptom Calendar</div>
+        <div id="gut-heatmap" class="heatmap-grid" style="margin-top:12px;"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+          <span style="font-size:10px;font-family:var(--mono);color:var(--text-dim);">Low</span>
+          <div style="width:10px;height:10px;border-radius:2px;background:var(--bg3)"></div>
+          <div style="width:10px;height:10px;border-radius:2px;background:rgba(0,212,170,0.25)"></div>
+          <div style="width:10px;height:10px;border-radius:2px;background:rgba(245,158,11,0.6)"></div>
+          <div style="width:10px;height:10px;border-radius:2px;background:#ef4444"></div>
+          <span style="font-size:10px;font-family:var(--mono);color:var(--text-dim);">High</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 5. DIET & NUTRITION ════════════════════════════════════════ -->
+    <section id="section-diet" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Diet & Nutrition</h1>
+        <span class="section-subtitle">NLP food entry · Fibre · FODMAP · Protein</span>
+      </div>
+
+      <!-- Today Summary -->
+      <div class="grid-4 mb-6">
+        <div class="card card-accent">
+          <div class="card-title">Fibre Today</div>
+          <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:8px;">
+            <div class="metric-big count-up" id="d-fibre">0</div>
+            <div class="metric-unit">/ 30g</div>
+          </div>
+          <div class="fibre-bar-wrap">
+            <div class="fibre-bar-fill" id="d-fibre-bar" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Protein Today</div>
+          <div class="metric-big white count-up" id="d-protein">0</div>
+          <div class="metric-unit">g · target 130–140g</div>
+        </div>
+        <div class="card card-accent-amber">
+          <div class="card-title">Calories Today</div>
+          <div class="metric-big amber count-up" id="d-calories">0</div>
+          <div class="metric-unit">kcal</div>
+        </div>
+        <div class="card">
+          <div class="card-title">FODMAP Risk</div>
+          <div class="metric-big count-up" id="d-fodmap" style="font-size:28px;">LOW</div>
+          <div class="metric-label text-dim">Daily cumulative load</div>
+        </div>
+      </div>
+
+      <!-- NLP Food Entry -->
+      <div class="card card-accent mb-6">
+        <div class="card-title">Log Food — Natural Language</div>
+        <div class="input-group mb-3">
+          <input class="input" type="text" id="food-input" placeholder='e.g. "2 scrambled eggs, sourdough toast, black coffee"' onkeydown="if(event.key==='Enter')searchFood()">
+          <button class="btn" onclick="searchFood()">🔍 Analyse</button>
+        </div>
+        <div id="food-result" class="hidden"></div>
+        <div style="margin-top:8px;">
+          <select class="input" id="meal-type" style="width:auto;display:inline-block">
+            <option>Breakfast</option>
+            <option>Lunch</option>
+            <option>Dinner</option>
+            <option>Snack</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Today's food log -->
+      <div class="card mb-6">
+        <div class="card-title">Today's Food Log</div>
+        <div id="diet-log-table">
+          <div class="empty-state">
+            <div class="empty-icon">🥗</div>
+            <div class="empty-title">Nothing logged yet</div>
+            <div class="empty-desc">Use the NLP entry above to log your meals</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Supplement log -->
+      <div class="card">
+        <div class="card-title">Supplement Log</div>
+        <div class="grid-3 mb-3">
+          <div class="form-row">
+            <label>Supplement</label>
+            <input class="input" type="text" id="supp-name" placeholder="Magnesium Glycinate">
+          </div>
+          <div class="form-row">
+            <label>Dose</label>
+            <input class="input" type="text" id="supp-dose" placeholder="400mg">
+          </div>
+          <div class="form-row">
+            <label>Timing</label>
+            <select class="input" id="supp-timing">
+              <option>Morning</option>
+              <option>Pre-workout</option>
+              <option>With meal</option>
+              <option>Evening</option>
+              <option>Pre-sleep</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="logSupplement()">Log Supplement</button>
+        <div id="supp-log" class="mt-3"></div>
+      </div>
+    </section>
+
+    <!-- ══ 6. COGNITIVE PERFORMANCE ══════════════════════════════════ -->
+    <section id="section-cognitive" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Cognitive Performance</h1>
+        <span class="section-subtitle">Reaction time · Working memory · 90-day trend</span>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid-4 mb-6">
+        <div class="card card-accent">
+          <div class="card-title">Avg Reaction Time</div>
+          <div class="metric-big count-up" id="cog-rt">--</div>
+          <div class="metric-unit">ms</div>
+          <div class="metric-trend text-dim">Elite: &lt;200ms · Good: 200–250ms</div>
+        </div>
+        <div class="card card-accent-blue">
+          <div class="card-title">N-Back Accuracy</div>
+          <div class="metric-big blue count-up" id="cog-nb">--</div>
+          <div class="metric-unit">%</div>
+          <div class="metric-trend text-dim">2-back target: &gt;85%</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Tests This Week</div>
+          <div class="metric-big white count-up" id="cog-count">0</div>
+          <div class="metric-unit">sessions</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Weekly Score</div>
+          <div class="metric-big count-up" id="cog-score">--</div>
+          <div class="metric-unit">/100</div>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-6" style="align-items:start">
+        <!-- Reaction Time Test -->
+        <div class="card card-accent">
+          <div class="card-title" id="rt-test-title">Simple Reaction Time Test</div>
+          <div id="rt-test-arena" style="height:220px;">
+            <div class="rt-instruction" id="rt-instruction">
+              <div style="font-size:24px;margin-bottom:8px;">⚡</div>
+              Click to start<br>
+              <span style="font-size:11px;color:var(--text-muted);">Press the dot the moment it appears<br>30 trials · ~2 minutes</span>
+            </div>
+          </div>
+          <div id="rt-results" class="hidden" style="margin-top:12px;">
+            <div class="grid-3" style="text-align:center;">
+              <div>
+                <div style="font-size:22px;font-family:var(--mono);color:var(--teal);" id="rt-result-avg">--</div>
+                <div style="font-size:9px;color:var(--text-dim);font-family:var(--mono);">AVG MS</div>
+              </div>
+              <div>
+                <div style="font-size:22px;font-family:var(--mono);color:var(--blue);" id="rt-result-best">--</div>
+                <div style="font-size:9px;color:var(--text-dim);font-family:var(--mono);">BEST MS</div>
+              </div>
+              <div>
+                <div style="font-size:22px;font-family:var(--mono);color:var(--amber);" id="rt-result-percentile">--</div>
+                <div style="font-size:9px;color:var(--text-dim);font-family:var(--mono);">PERCENTILE</div>
+              </div>
+            </div>
+            <button class="btn w-full mt-3" id="rt-save-btn">Save Result</button>
+          </div>
+          <div style="margin-top:8px;text-align:center;">
+            <span style="font-size:10px;font-family:var(--mono);color:var(--text-muted);" id="rt-progress">Trial 0 / 30</span>
+          </div>
+        </div>
+
+        <!-- N-back test -->
+        <div class="card card-accent-blue">
+          <div class="card-title">2-Back Working Memory Test</div>
+          <div style="text-align:center;padding:16px 0">
+            <div id="nback-grid" style="margin:0 auto 16px;">
+              <!-- 9 cells -->
+              <div class="nback-cell" id="nc-0"></div>
+              <div class="nback-cell" id="nc-1"></div>
+              <div class="nback-cell" id="nc-2"></div>
+              <div class="nback-cell" id="nc-3"></div>
+              <div class="nback-cell" id="nc-4"></div>
+              <div class="nback-cell" id="nc-5"></div>
+              <div class="nback-cell" id="nc-6"></div>
+              <div class="nback-cell" id="nc-7"></div>
+              <div class="nback-cell" id="nc-8"></div>
+            </div>
+            <div style="font-size:12px;font-family:var(--mono);color:var(--text-dim);margin-bottom:12px;" id="nback-instruction">
+              Press <strong style="color:var(--teal)">MATCH</strong> when the lit square matches the one from 2 turns ago
+            </div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;">
+              <button class="btn btn-ghost" id="nback-match-btn" onclick="nbackAnswer(true)" disabled>✓ MATCH</button>
+              <button class="btn btn-ghost btn-red" id="nback-nomatch-btn" onclick="nbackAnswer(false)" disabled>✗ NO MATCH</button>
+            </div>
+            <div id="nback-score-display" style="font-family:var(--mono);font-size:12px;color:var(--text-dim);">
+              Score: <span id="nback-correct">0</span> / <span id="nback-total">0</span>
+            </div>
+            <button class="btn btn-sm mt-3" id="nback-start-btn" onclick="startNback()">Start 2-Back Test</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conditions + trend -->
+      <div class="card">
+        <div class="card-title">Cognitive Trend — 90 Days</div>
+        <div class="chart-wrap" style="height:160px">
+          <canvas id="cog-trend-chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 7. LAB RESULTS & BIO AGE ════════════════════════════════ -->
+    <section id="section-labs" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Lab Results & Biological Age</h1>
+        <span class="section-subtitle">Biomarkers · Reference ranges · Bio age tracking</span>
+      </div>
+
+      <!-- Biological Age Dashboard -->
+      <div class="card mb-6" style="background:linear-gradient(135deg,var(--bg2) 0%,rgba(0,212,170,0.05) 100%);border-left:3px solid var(--teal);">
+        <div class="card-title">Biological Age vs Chronological Age</div>
+        <div class="grid-4" style="margin-top:8px">
+          <div style="text-align:center">
+            <div style="font-size:11px;font-family:var(--mono);color:var(--text-dim);margin-bottom:4px;">CHRONOLOGICAL</div>
+            <div style="font-size:48px;font-family:var(--mono);font-weight:700;color:var(--text);">25</div>
+            <div style="font-size:10px;color:var(--text-muted);">years old</div>
+          </div>
+          <div style="text-align:center" id="bio-age-panel">
+            <div style="font-size:11px;font-family:var(--mono);color:var(--teal);margin-bottom:4px;">BIOLOGICAL AGE</div>
+            <div style="font-size:48px;font-family:var(--mono);font-weight:700;color:var(--teal);" id="bio-age-val">?</div>
+            <div style="font-size:10px;color:var(--text-dim)">Add from lab results</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;font-family:var(--mono);color:var(--text-dim);margin-bottom:4px;">DUNEDINPACE</div>
+            <div style="font-size:48px;font-family:var(--mono);font-weight:700;color:var(--amber);" id="dunedinscore">?</div>
+            <div style="font-size:10px;color:var(--text-muted)">yrs/yr · target: &lt;0.85</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;font-family:var(--mono);color:var(--text-dim);margin-bottom:4px;">GLYCANAGE</div>
+            <div style="font-size:48px;font-family:var(--mono);font-weight:700;color:var(--blue);" id="glycanage">?</div>
+            <div style="font-size:10px;color:var(--text-muted)">Add when tested</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Biomarkers -->
+      <div class="grid-2 mb-6" style="align-items:start">
+        <div class="card">
+          <div class="card-title">Key Biomarkers</div>
+          <div id="biomarker-list">
+            <div class="empty-state" style="padding:24px">
+              <div class="empty-icon">🧬</div>
+              <div class="empty-title">No lab results yet</div>
+              <div class="empty-desc">Add your results below</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add lab result -->
+        <div class="card card-accent">
+          <div class="card-title">Add Lab Result</div>
+          <div class="form-row">
+            <label>Biomarker</label>
+            <input class="input" list="biomarker-list-datalist" id="lab-name" placeholder="e.g. Calprotectin, ApoB, Testosterone">
+            <datalist id="biomarker-list-datalist">
+              <option>Calprotectin</option>
+              <option>ApoB</option>
+              <option>hsCRP</option>
+              <option>Testosterone (Free)</option>
+              <option>Testosterone (Total)</option>
+              <option>Fasting Insulin</option>
+              <option>Fasting Glucose</option>
+              <option>HOMA-IR</option>
+              <option>Vitamin D</option>
+              <option>Omega-3 Index</option>
+              <option>Ferritin</option>
+              <option>B12</option>
+              <option>TSH</option>
+              <option>Free T3</option>
+              <option>Free T4</option>
+              <option>DunedinPACE</option>
+              <option>GlycanAge</option>
+              <option>Cortisol (Morning)</option>
+              <option>SHBG</option>
+              <option>IGF-1</option>
+            </datalist>
+          </div>
+          <div class="grid-2">
+            <div class="form-row">
+              <label>Value</label>
+              <input class="input" type="number" step="any" id="lab-value" placeholder="0.0">
+            </div>
+            <div class="form-row">
+              <label>Unit</label>
+              <input class="input" type="text" id="lab-unit" placeholder="µg/g, mg/dL...">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Date</label>
+            <input class="input" type="date" id="lab-date">
+          </div>
+          <div class="form-row">
+            <label>Lab / Source</label>
+            <input class="input" type="text" id="lab-source" placeholder="Selph, GP, etc.">
+          </div>
+          <button class="btn w-full" onclick="addLabResult()">Add Result</button>
+        </div>
+      </div>
+
+      <!-- Key Targets -->
+      <div class="card">
+        <div class="card-title">Performance Targets — 25yr Male</div>
+        <div id="targets-grid" style="margin-top:12px;"></div>
+      </div>
+    </section>
+
+    <!-- ══ 8. PROTOCOLS ══════════════════════════════════════════════ -->
+    <section id="section-protocols" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Protocol Engine</h1>
+        <span class="section-subtitle">Daily Blueprint · Streaks · Adherence</span>
+      </div>
+
+      <div class="grid-2 mb-6" style="align-items:start">
+        <!-- Full checklist -->
+        <div class="card card-accent">
+          <div class="card-title">Today's Protocol</div>
+          <div id="full-protocol-list"></div>
+          <hr class="divider">
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-mono text-dim" id="full-protocol-pct">--</span>
+            <span class="streak-badge" id="streak-badge">🔥 -- day streak</span>
+          </div>
+        </div>
+
+        <!-- Adherence heatmap -->
+        <div>
+          <div class="card mb-4">
+            <div class="card-title">Weekly Adherence</div>
+            <div class="chart-wrap" style="height:120px">
+              <canvas id="adherence-chart"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">30-Day Adherence Heatmap</div>
+            <div id="adherence-heatmap" class="heatmap-grid" style="margin-top:12px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 9. CORRELATIONS ═══════════════════════════════════════════ -->
+    <section id="section-correlations" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Correlations</h1>
+        <span class="section-subtitle">Lag analysis · Scatter plots · AI pattern insights</span>
+      </div>
+
+      <!-- AI summary -->
+      <div id="corr-ai-summary" class="mb-6"></div>
+
+      <!-- Top triggers -->
+      <div class="card mb-6">
+        <div class="card-title">Top Gut Symptom Triggers — Lag Analysis (0–72hrs)</div>
+        <div id="triggers-list">
+          <div class="empty-state">
+            <div class="empty-icon">🔗</div>
+            <div class="empty-title">Not enough data yet</div>
+            <div class="empty-desc">Log at least 3 gut events with severity ≥3 to see trigger analysis</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scatter plots -->
+      <div class="card">
+        <div class="card-title">Scatter Plot Explorer</div>
+        <div class="scatter-controls" id="scatter-controls">
+          <button class="scatter-btn active" data-x="sleep" data-y="hrv" onclick="loadScatter('sleep_hrv_next')">Sleep vs HRV</button>
+          <button class="scatter-btn" data-x="fibre" data-y="gut" onclick="loadScatter('fibre_gut')">Fibre vs Gut Pain</button>
+          <button class="scatter-btn" data-x="hrv" data-y="cognition" onclick="loadScatter('hrv_cognition')">HRV vs Reaction Time</button>
+          <button class="scatter-btn" data-x="steps" data-y="gut" onclick="loadScatter('steps_gut')">Steps vs Gut Pain</button>
+        </div>
+        <div class="chart-wrap" style="height:280px">
+          <canvas id="scatter-chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 10. EXPERIMENTS ═══════════════════════════════════════════ -->
+    <section id="section-experiments" class="section">
+      <div class="section-header">
+        <h1 class="section-title">Experiments</h1>
+        <span class="section-subtitle">N=1 protocol trials · Before/after · Effect size</span>
+      </div>
+
+      <div class="grid-2 mb-6" style="align-items:start">
+        <!-- Active experiments -->
+        <div>
+          <div class="card-title mb-3">Active Experiments</div>
+          <div id="active-experiments"></div>
+        </div>
+
+        <!-- Create experiment -->
+        <div class="card card-accent">
+          <div class="card-title">Create New Experiment</div>
+          <div class="form-row">
+            <label>Name</label>
+            <input class="input" type="text" id="exp-name" placeholder="e.g. Added psyllium husk 10g/day">
+          </div>
+          <div class="form-row">
+            <label>Hypothesis</label>
+            <textarea class="input" id="exp-hypothesis" rows="2" placeholder="I expect this to reduce gut severity by 30%..."></textarea>
+          </div>
+          <div class="form-row">
+            <label>Outcome Metric</label>
+            <select class="input" id="exp-metric">
+              <option value="gut_score">Gut Score</option>
+              <option value="pain_severity">Pain Severity</option>
+              <option value="hrv">HRV</option>
+              <option value="sleep_quality">Sleep Quality</option>
+              <option value="energy">Energy Level</option>
+            </select>
+          </div>
+          <button class="btn w-full" onclick="createExperiment()">Start Experiment</button>
+        </div>
+      </div>
+
+      <!-- Completed experiments -->
+      <div>
+        <div class="card-title mb-3">Completed & Planned</div>
+        <div id="completed-experiments"></div>
+      </div>
+    </section>
+
+    <!-- ══ 11. BODY COMPOSITION ═══════════════════════════════════════ -->
+    <section id="section-body-comp" class="section">
+      <div class="section-header">
+        <h1 class="section-title" data-sys="BODY_COMP">Body Composition</h1>
+        <span class="section-subtitle">Weight · Body fat · Lean mass · Measurements</span>
+      </div>
+
+      <!-- STAT STRIP -->
+      <div class="grid-4 mb-4">
+        <div class="card card-accent text-center">
+          <div class="metric-label">Weight</div>
+          <div class="metric-big count-up" id="bc-weight">--</div>
+          <div class="metric-unit">kg</div>
+          <div class="metric-trend" id="bc-weight-trend"></div>
+        </div>
+        <div class="card card-accent text-center">
+          <div class="metric-label">Body Fat</div>
+          <div class="metric-big count-up" id="bc-bf">--</div>
+          <div class="metric-unit">%</div>
+          <div class="metric-trend" id="bc-bf-trend"></div>
+        </div>
+        <div class="card card-accent text-center">
+          <div class="metric-label">Lean Mass</div>
+          <div class="metric-big count-up" id="bc-lean">--</div>
+          <div class="metric-unit">kg</div>
+          <div class="metric-trend" id="bc-lean-trend"></div>
+        </div>
+        <div class="card card-accent text-center">
+          <div class="metric-label">BMI</div>
+          <div class="metric-big" id="bc-bmi">--</div>
+          <div class="metric-unit">kg/m²</div>
+          <div class="metric-trend" id="bc-bmi-label" style="font-size:10px"></div>
+        </div>
+      </div>
+
+      <!-- BODY COMP VISUAL + GOALS -->
+      <div class="grid-2 mb-4">
+
+        <!-- Body Composition Breakdown -->
+        <div class="card">
+          <div class="card-title">Composition Breakdown</div>
+          <div style="display:flex;align-items:center;gap:24px;padding:8px 0">
+            <div style="width:140px;height:140px;position:relative;flex-shrink:0">
+              <canvas id="bc-donut-chart" width="140" height="140"></canvas>
+              <div id="bc-donut-label" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+                <div style="font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:#00e5ff" id="bc-donut-pct">--</div>
+                <div style="font-size:9px;color:var(--text-dim);font-family:var(--mono)">BODY FAT</div>
+              </div>
+            </div>
+            <div style="flex:1">
+              <div id="bc-breakdown-bars"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Goals & Targets -->
+        <div class="card">
+          <div class="card-title">Physique Targets</div>
+          <div id="bc-targets-list" style="display:flex;flex-direction:column;gap:10px;padding:4px 0"></div>
+        </div>
+      </div>
+
+      <!-- TRENDS CHARTS -->
+      <div class="grid-2 mb-4">
+        <div class="card">
+          <div class="card-title">Weight Trend</div>
+          <div class="chart-wrap" style="height:160px"><canvas id="bc-weight-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Body Fat % Trend</div>
+          <div class="chart-wrap" style="height:160px"><canvas id="bc-bf-chart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-title">Lean Mass Trend</div>
+        <div class="chart-wrap" style="height:160px"><canvas id="bc-lean-chart"></canvas></div>
+      </div>
+
+      <!-- MEASUREMENTS PANEL -->
+      <div class="grid-2 mb-4">
+        <!-- Latest measurements -->
+        <div class="card">
+          <div class="card-title">Body Measurements</div>
+          <div id="bc-measurements" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 0"></div>
+        </div>
+
+        <!-- Log form -->
+        <div class="card">
+          <div class="card-title">Log Check-In</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div class="grid-2" style="gap:8px">
+              <div>
+                <label class="input-label">Date</label>
+                <input class="input" type="date" id="bc-date">
+              </div>
+              <div>
+                <label class="input-label">Weight (kg)</label>
+                <input class="input" type="number" id="bc-wt" placeholder="100.0" step="0.1">
+              </div>
+            </div>
+            <div class="grid-2" style="gap:8px">
+              <div>
+                <label class="input-label">Body Fat %</label>
+                <input class="input" type="number" id="bc-bf-input" placeholder="15.0" step="0.1">
+              </div>
+              <div>
+                <label class="input-label">Waist (cm)</label>
+                <input class="input" type="number" id="bc-waist" placeholder="82" step="0.5">
+              </div>
+            </div>
+            <div class="grid-2" style="gap:8px">
+              <div>
+                <label class="input-label">Chest (cm)</label>
+                <input class="input" type="number" id="bc-chest" placeholder="102" step="0.5">
+              </div>
+              <div>
+                <label class="input-label">Arm (cm)</label>
+                <input class="input" type="number" id="bc-arm" placeholder="38" step="0.5">
+              </div>
+            </div>
+            <div class="grid-2" style="gap:8px">
+              <div>
+                <label class="input-label">Neck (cm)</label>
+                <input class="input" type="number" id="bc-neck" placeholder="38" step="0.5">
+              </div>
+              <div>
+                <label class="input-label">Hip (cm)</label>
+                <input class="input" type="number" id="bc-hip" placeholder="95" step="0.5">
+              </div>
+            </div>
+            <input class="input" type="text" id="bc-notes" placeholder="Notes (method, conditions...)">
+            <button class="btn w-full" onclick="logBodyComp()">📊 Save Check-In</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HISTORY TABLE -->
+      <div class="card">
+        <div class="card-title">Check-In History</div>
+        <div id="bc-history-table"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+<!-- App modules -->
+<script src="/js/app.js"></script>
+<script src="/js/bodymap.js"></script>
+<script src="/js/charts.js"></script>
+<script src="/js/command-center.js"></script>
+<script src="/js/vitals.js"></script>
+<script src="/js/performance.js"></script>
+<script src="/js/gut.js"></script>
+<script src="/js/diet.js"></script>
+<script src="/js/cognitive.js"></script>
+<script src="/js/labs.js"></script>
+<script src="/js/protocols.js"></script>
+<script src="/js/correlations.js"></script>
+<script src="/js/experiments.js"></script>
+<script src="/js/body-comp.js"></script>
+
+</body>
+</html>

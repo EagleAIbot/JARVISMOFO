@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gut Health Analysis — Jack's Case</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Manrope:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0e1a; --panel: #0f1629; --border: #1e2d4a;
+      --text: #e8edf5; --muted: #6b7a99; --accent: #00d4aa;
+      --accent2: #3b82f6; --warn: #f59e0b; --danger: #ef4444; --safe: #10b981;
+    }
+    body { font-family: 'Manrope', sans-serif; background: var(--bg); color: var(--text); padding: 20px; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+    .header h1 { font-size: 24px; font-weight: 800; }
+    .header h1 span { color: var(--accent); }
+    .header p { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-top: 3px; }
+    .badges { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+    .badge { padding: 4px 11px; border-radius: 100px; font-size: 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
+    .bg { background: rgba(16,185,129,.15); color: #10b981; border: 1px solid rgba(16,185,129,.3); }
+    .ba { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+    .bb { background: rgba(59,130,246,.15); color: #3b82f6; border: 1px solid rgba(59,130,246,.3); }
+
+    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
+
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .ptitle { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 12px; }
+
+    /* Left column */
+    .left-col { display: flex; flex-direction: column; gap: 12px; }
+
+    /* Toggle bar */
+    .toggle-bar { display: flex; gap: 4px; background: rgba(255,255,255,.04); padding: 3px; border-radius: 9px; }
+    .tog-btn { flex: 1; padding: 6px; border-radius: 6px; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'Manrope', sans-serif; transition: all .2s; }
+    .tog-btn.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+
+    /* Pain mode selector */
+    .pain-modes { display: flex; gap: 5px; }
+    .pm-btn { flex: 1; padding: 7px 4px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; font-family: 'Manrope', sans-serif; text-align: center; transition: all .2s; }
+    .pm-now.sel { background: rgba(239,68,68,.18); color: #fca5a5; border-color: rgba(239,68,68,.6); }
+    .pm-usual.sel { background: rgba(245,158,11,.15); color: #fcd34d; border-color: rgba(245,158,11,.5); }
+    .pm-clear.sel { background: rgba(107,114,153,.15); color: var(--muted); border-color: var(--muted); }
+
+    /* SVG body container */
+    .body-wrap { position: relative; display: flex; justify-content: center; }
+    #tooltip {
+      position: absolute; background: rgba(10,14,26,.97); border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 11px; font-size: 11px; pointer-events: none;
+      z-index: 100; display: none; white-space: nowrap; max-width: 200px; white-space: normal;
+    }
+    #tooltip strong { color: var(--accent); display: block; margin-bottom: 1px; font-size: 11px; }
+    #tooltip span { color: var(--muted); font-size: 10px; }
+
+    /* Zone overlays in SVG */
+    .zone { cursor: pointer; }
+    .zone:hover { opacity: .75; }
+
+    /* Region info */
+    .region-info-wrap { min-height: 90px; }
+    .region-empty { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; font-style: italic; min-height: 80px; text-align: center; }
+    .ri-header h3 { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+    .ri-header p { font-size: 11px; color: var(--muted); }
+    .organ-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+    .otag { padding: 2px 7px; border-radius: 100px; font-size: 10px; font-weight: 600; background: rgba(59,130,246,.1); color: #93c5fd; border: 1px solid rgba(59,130,246,.2); font-family: 'IBM Plex Mono', monospace; }
+    .ri-note { font-size: 11px; line-height: 1.6; color: var(--muted); }
+    .ri-user { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(0,212,170,.07); border: 1px solid rgba(0,212,170,.2); color: var(--accent); font-size: 11px; font-weight: 600; line-height: 1.5; }
+
+    /* Legend */
+    .leg-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+    .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Right col */
+    .right-col { display: flex; flex-direction: column; gap: 14px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .sc { padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid var(--border); }
+    .sc .sl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; margin-bottom: 4px; }
+    .sc .sv { font-size: 18px; font-weight: 800; }
+    .sc .ss { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+    .vg { color: var(--safe); } .va { color: var(--warn); } .vt { color: var(--accent); font-size: 14px !important; }
+
+    /* Tabs */
+    .tab-bar { display: flex; gap: 4px; background: rgba(255,255,255,.04); padding: 3px; border-radius: 9px; margin-bottom: 14px; }
+    .tab { flex: 1; padding: 7px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; text-align: center; border: none; background: transparent; color: var(--muted); transition: all .2s; font-family: 'Manrope', sans-serif; }
+    .tab.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+    .tab-content { display: none; } .tab-content.active { display: block; }
+
+    /* Bars */
+    .li { margin-bottom: 14px; }
+    .li-hdr { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .li-name { font-size: 13px; font-weight: 600; }
+    .li-pct { font-size: 12px; font-family: 'IBM Plex Mono', monospace; color: var(--muted); }
+    .bar-track { height: 6px; background: rgba(255,255,255,.06); border-radius: 100px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 100px; transition: width 1.2s cubic-bezier(.22,1,.36,1); }
+    .bt { background: var(--accent); } .ba2 { background: var(--warn); } .bbl { background: var(--accent2); } .br { background: var(--danger); }
+    .li-desc { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+    .ec { padding: 11px 13px; border-radius: 11px; }
+    .ec-s { background: rgba(16,185,129,.07); border: 1px solid rgba(16,185,129,.2); }
+    .ec-w { background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.2); }
+    .ec h4 { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
+    .ec-s h4 { color: var(--safe); } .ec-w h4 { color: var(--warn); }
+    .ec ul { list-style: none; font-size: 11px; color: var(--muted); line-height: 1.85; }
+    .ec ul li::before { content: '→ '; }
+
+    /* Diet */
+    .fr { display: flex; align-items: flex-start; gap: 11px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .fr:last-of-type { border-bottom: none; }
+    .fi { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+    .ft2 { flex: 1; } .ft2 h4 { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+    .ft2 p { font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .imp { font-size: 10px; font-family: 'IBM Plex Mono', monospace; font-weight: 700; padding: 2px 7px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+    .ih { background: rgba(239,68,68,.15); color: #fca5a5; } .im { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .dtip { margin-top: 11px; padding: 11px 13px; background: rgba(0,212,170,.07); border: 1px solid rgba(0,212,170,.2); border-radius: 9px; font-size: 11px; color: var(--muted); line-height: 1.7; }
+    .dtip strong { color: var(--accent); }
+
+    /* Tests */
+    .tc { padding: 13px; border-radius: 11px; margin-bottom: 9px; }
+    .tc-s { background: rgba(16,185,129,.07); border: 1px solid rgba(16,185,129,.25); }
+    .tc-b { background: rgba(59,130,246,.07); border: 1px solid rgba(59,130,246,.25); }
+    .tc-p { background: rgba(124,58,237,.07); border: 1px solid rgba(124,58,237,.25); }
+    .tc-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .tc-hdr h4 { font-size: 12px; font-weight: 700; }
+    .tc-s .tc-hdr h4 { color: var(--safe); } .tc-b .tc-hdr h4 { color: var(--accent2); } .tc-p .tc-hdr h4 { color: #a78bfa; }
+    .tc-body { font-size: 11px; color: var(--muted); line-height: 1.7; }
+    .tc-list { list-style: none; font-size: 11px; color: var(--muted); line-height: 2; margin-top: 4px; }
+    .tc-list li::before { content: '→ '; } .tc-list li strong { color: var(--text); }
+
+    /* Timeline */
+    .tl { position: relative; padding-left: 20px; }
+    .tl::before { content: ''; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 2px; background: var(--border); }
+    .tl-item { position: relative; margin-bottom: 16px; }
+    .tl-item::before { content: ''; position: absolute; left: -18px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--border); border: 2px solid var(--bg); }
+    .tl-now::before { background: var(--accent) !important; box-shadow: 0 0 7px rgba(0,212,170,.6); }
+    .tl-warn::before { background: var(--warn) !important; }
+    .tl-future::before { background: transparent !important; border-color: var(--muted) !important; }
+    .tl-date { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--muted); margin-bottom: 2px; }
+    .tl-event { font-size: 12px; font-weight: 700; margin-bottom: 2px; }
+    .tl-desc { font-size: 11px; color: var(--muted); line-height: 1.55; }
+
+    /* Actions */
+    .alist { display: flex; flex-direction: column; gap: 9px; }
+    .aitem { display: flex; gap: 11px; padding: 12px; border-radius: 11px; background: rgba(255,255,255,.03); border: 1px solid var(--border); }
+    .anum { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; }
+    .n1 { background: rgba(0,212,170,.15); color: var(--accent); }
+    .n2 { background: rgba(59,130,246,.15); color: var(--accent2); }
+    .n3 { background: rgba(245,158,11,.15); color: var(--warn); }
+    .n4 { background: rgba(124,58,237,.15); color: #a78bfa; }
+    .n5 { background: rgba(239,68,68,.15); color: #fca5a5; }
+    .aitem h4 { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+    .aitem p { font-size: 11px; color: var(--muted); line-height: 1.65; }
+
+    /* Verdict */
+    .verdict { padding: 17px; border-radius: 13px; background: rgba(0,212,170,.06); border: 1px solid rgba(0,212,170,.22); }
+    .verdict h3 { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+    .verdict p { font-size: 12px; color: var(--text); opacity: .85; line-height: 1.75; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Gut Health <span>Analysis</span></h1>
+    <p>MALE · 25YRS · ONSET DEC 2025 · UPDATED MAR 2026</p>
+  </div>
+  <div class="badges">
+    <span class="badge bg">MRI NEGATIVE</span>
+    <span class="badge bg">FIT NEGATIVE</span>
+    <span class="badge ba">SYMPTOMS ~4 MONTHS</span>
+    <span class="badge bb">MONITORING</span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ===== LEFT COLUMN ===== -->
+  <div class="left-col">
+
+    <!-- Controls -->
+    <div class="panel" style="padding:12px;">
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+        <div class="toggle-bar" style="flex:1;">
+          <button class="tog-btn active" id="btn-front" onclick="setView('front')">Front</button>
+          <button class="tog-btn" id="btn-back" onclick="setView('back')">Back</button>
+        </div>
+        <span style="font-size:10px; color:var(--muted); font-family:'IBM Plex Mono',monospace;">Click body to mark</span>
+      </div>
+      <div class="pain-modes">
+        <button class="pm-btn pm-now sel" id="pm-now" onclick="setPainMode('now')">🔴 Hurts now</button>
+        <button class="pm-btn pm-usual" id="pm-usual" onclick="setPainMode('usual')">🟡 Usual pain</button>
+        <button class="pm-btn pm-clear" id="pm-clear" onclick="setPainMode('clear')">✕ Clear</button>
+      </div>
+      <div style="margin-top:8px; font-size:10px; color:var(--muted); font-family:'IBM Plex Mono',monospace;">
+        MODE: <span id="mode-label" style="color:var(--danger);">HURTS NOW</span>
+        &nbsp;·&nbsp; <span id="zone-count" style="color:var(--accent);">4 zones marked</span>
+      </div>
+    </div>
+
+    <!-- Body SVG -->
+    <div class="panel" style="padding:12px;">
+      <div class="body-wrap">
+        <div id="tooltip"><strong id="tt-title"></strong><span id="tt-sub"></span></div>
+        <svg id="body-svg" viewBox="0 0 280 560" style="width:100%; max-width:250px; display:block; overflow:visible;">
+
+          <!-- ============ FRONT VIEW ============ -->
+          <g id="g-front">
+            <!-- Body base (skin) -->
+            <!-- Head -->
+            <ellipse cx="140" cy="46" rx="32" ry="38" fill="#c8a882" stroke="#a88060" stroke-width="1"/>
+            <!-- Face: eyes -->
+            <ellipse cx="129" cy="42" rx="4.5" ry="5.5" fill="#7a5c44" opacity=".55"/>
+            <ellipse cx="151" cy="42" rx="4.5" ry="5.5" fill="#7a5c44" opacity=".55"/>
+            <!-- Nose -->
+            <path d="M138 50 Q140 55 142 50" stroke="#a88060" stroke-width="1" fill="none" opacity=".5"/>
+            <!-- Mouth -->
+            <path d="M133 58 Q140 63 147 58" stroke="#a88060" stroke-width="1.5" fill="none" opacity=".6"/>
+            <!-- Ears -->
+            <ellipse cx="108" cy="49" rx="5" ry="8" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="172" cy="49" rx="5" ry="8" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Neck -->
+            <rect x="127" y="82" width="26" height="20" rx="5" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <line x1="136" y1="84" x2="136" y2="100" stroke="#a88060" stroke-width=".5" opacity=".4"/>
+            <line x1="144" y1="84" x2="144" y2="100" stroke="#a88060" stroke-width=".5" opacity=".4"/>
+            <!-- Torso -->
+            <path d="M70 102 Q59 116 57 152 L57 292 Q70 306 90 308 L190 308 Q210 306 223 292 L223 152 Q221 116 210 102 L186 99 L154 96 L126 96 L94 99 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Sternum -->
+            <line x1="140" y1="106" x2="140" y2="172" stroke="#a88060" stroke-width=".8" opacity=".4"/>
+            <!-- Rib outline -->
+            <path d="M80 112 Q76 148 80 172 L140 172 L200 172 Q204 148 200 112" stroke="#a88060" stroke-width=".7" fill="none" opacity=".25"/>
+            <!-- Navel -->
+            <circle cx="140" cy="218" r="3.5" fill="#a88060" opacity=".65"/>
+            <!-- Abs -->
+            <line x1="113" y1="175" x2="167" y2="175" stroke="#a88060" stroke-width=".5" opacity=".2"/>
+            <line x1="112" y1="198" x2="168" y2="198" stroke="#a88060" stroke-width=".5" opacity=".2"/>
+            <path d="M116 152 Q111 175 113 198" stroke="#a88060" stroke-width=".5" fill="none" opacity=".2"/>
+            <path d="M164 152 Q169 175 167 198" stroke="#a88060" stroke-width=".5" fill="none" opacity=".2"/>
+            <!-- Left arm -->
+            <path d="M61 108 Q40 120 34 158 Q30 190 34 220 Q37 237 47 240 Q56 243 62 236 Q68 229 66 220 Q62 190 64 158 Q68 126 78 110 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M40 240 Q33 268 32 298 L34 312 Q43 318 52 314 L57 298 Q60 270 62 240" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="40" cy="325" rx="13" ry="16" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Right arm -->
+            <path d="M219 108 Q240 120 246 158 Q250 190 246 220 Q243 237 233 240 Q224 243 218 236 Q212 229 214 220 Q218 190 216 158 Q212 126 202 110 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M240 240 Q247 268 248 298 L246 312 Q237 318 228 314 L223 298 Q220 270 218 240" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="240" cy="325" rx="13" ry="16" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Left leg -->
+            <path d="M88 308 Q78 334 76 378 Q74 422 76 458 Q78 476 86 480 Q96 484 104 480 Q112 476 114 458 Q116 422 114 378 Q112 334 102 308 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M78 458 Q76 484 78 508 Q80 524 90 528 Q98 532 107 528 Q116 524 118 508 Q120 484 118 458" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="90" cy="538" rx="18" ry="10" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Right leg -->
+            <path d="M192 308 Q202 334 204 378 Q206 422 204 458 Q202 476 194 480 Q184 484 176 480 Q168 476 166 458 Q164 422 166 378 Q168 334 178 308 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M202 458 Q204 484 202 508 Q200 524 190 528 Q182 532 173 528 Q164 524 162 508 Q160 484 162 458" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="190" cy="538" rx="18" ry="10" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+
+            <!-- ---- CLICKABLE FRONT ZONES ---- -->
+            <!-- Head -->
+            <ellipse cx="140" cy="46" rx="32" ry="38" class="zone" id="z-head" fill="transparent" stroke="transparent" onclick="clickZone('head')" onmouseenter="showTip(event,'head')" onmouseleave="hideTip()"/>
+            <!-- Neck -->
+            <rect x="123" y="82" width="34" height="22" rx="4" class="zone" id="z-neck" fill="transparent" stroke="transparent" onclick="clickZone('neck')" onmouseenter="showTip(event,'neck')" onmouseleave="hideTip()"/>
+            <!-- Left chest -->
+            <path d="M70 102 L70 172 L140 172 L140 100 L120 97 L94 100 Z" class="zone" id="z-lchest" fill="transparent" stroke="transparent" onclick="clickZone('lchest')" onmouseenter="showTip(event,'lchest')" onmouseleave="hideTip()"/>
+            <!-- Right chest -->
+            <path d="M210 102 L210 172 L140 172 L140 100 L160 97 L186 100 Z" class="zone" id="z-rchest" fill="transparent" stroke="transparent" onclick="clickZone('rchest')" onmouseenter="showTip(event,'rchest')" onmouseleave="hideTip()"/>
+            <!-- LUQ -->
+            <rect x="60" y="172" width="80" height="58" class="zone" id="z-luq" fill="transparent" stroke="transparent" onclick="clickZone('luq')" onmouseenter="showTip(event,'luq')" onmouseleave="hideTip()"/>
+            <!-- RUQ -->
+            <rect x="140" y="172" width="80" height="58" class="zone" id="z-ruq" fill="transparent" stroke="transparent" onclick="clickZone('ruq')" onmouseenter="showTip(event,'ruq')" onmouseleave="hideTip()"/>
+            <!-- Central/umbilical -->
+            <rect x="78" y="230" width="124" height="52" class="zone" id="z-central" fill="transparent" stroke="transparent" onclick="clickZone('central')" onmouseenter="showTip(event,'central')" onmouseleave="hideTip()"/>
+            <!-- LLQ -->
+            <path d="M62 282 L62 308 L130 308 L140 282 L78 282 Z" class="zone" id="z-llq" fill="transparent" stroke="transparent" onclick="clickZone('llq')" onmouseenter="showTip(event,'llq')" onmouseleave="hideTip()"/>
+            <!-- RLQ -->
+            <path d="M218 282 L218 308 L150 308 L140 282 L202 282 Z" class="zone" id="z-rlq" fill="transparent" stroke="transparent" onclick="clickZone('rlq')" onmouseenter="showTip(event,'rlq')" onmouseleave="hideTip()"/>
+          </g>
+
+          <!-- ============ BACK VIEW ============ -->
+          <g id="g-back" style="display:none;">
+            <!-- Head back -->
+            <ellipse cx="140" cy="46" rx="32" ry="38" fill="#be9e76" stroke="#a88060" stroke-width=".8"/>
+            <!-- Hair -->
+            <ellipse cx="140" cy="28" rx="26" ry="18" fill="#8B6040" stroke="#7a5030" stroke-width=".5"/>
+            <!-- Neck -->
+            <rect x="127" y="82" width="26" height="20" rx="5" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Torso back -->
+            <path d="M70 102 Q59 116 57 152 L57 292 Q70 306 90 308 L190 308 Q210 306 223 292 L223 152 Q221 116 210 102 L186 99 L154 96 L126 96 L94 99 Z" fill="#be9e76" stroke="#a88060" stroke-width=".8"/>
+            <!-- Spine -->
+            <line x1="140" y1="104" x2="140" y2="298" stroke="#a88060" stroke-width="1.5" opacity=".35"/>
+            <!-- Spine bumps -->
+            <circle cx="140" cy="118" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="132" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="146" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="160" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="174" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="188" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="202" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="216" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="230" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="244" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="258" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="272" r="2.5" fill="#a88060" opacity=".45"/>
+            <circle cx="140" cy="286" r="2.5" fill="#a88060" opacity=".45"/>
+            <!-- Shoulder blades -->
+            <path d="M72 112 Q68 144 80 168 Q93 165 105 162 Q110 144 102 116 Z" fill="#b09068" stroke="#a88060" stroke-width=".5" opacity=".45"/>
+            <path d="M208 112 Q212 144 200 168 Q187 165 175 162 Q170 144 178 116 Z" fill="#b09068" stroke="#a88060" stroke-width=".5" opacity=".45"/>
+            <!-- Glute line -->
+            <path d="M88 294 Q114 304 140 304 Q166 304 192 294" stroke="#a88060" stroke-width="1.2" fill="none" opacity=".35"/>
+            <line x1="140" y1="294" x2="140" y2="308" stroke="#a88060" stroke-width=".8" opacity=".35"/>
+            <!-- Arms (same shape) -->
+            <path d="M61 108 Q40 120 34 158 Q30 190 34 220 Q37 237 47 240 Q56 243 62 236 Q68 229 66 220 Q62 190 64 158 Q68 126 78 110 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M40 240 Q33 268 32 298 L34 312 Q43 318 52 314 L57 298 Q60 270 62 240" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="40" cy="325" rx="13" ry="16" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M219 108 Q240 120 246 158 Q250 190 246 220 Q243 237 233 240 Q224 243 218 236 Q212 229 214 220 Q218 190 216 158 Q212 126 202 110 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M240 240 Q247 268 248 298 L246 312 Q237 318 228 314 L223 298 Q220 270 218 240" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="240" cy="325" rx="13" ry="16" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <!-- Legs (same) -->
+            <path d="M88 308 Q78 334 76 378 Q74 422 76 458 Q78 476 86 480 Q96 484 104 480 Q112 476 114 458 Q116 422 114 378 Q112 334 102 308 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M78 458 Q76 484 78 508 Q80 524 90 528 Q98 532 107 528 Q116 524 118 508 Q120 484 118 458" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="90" cy="538" rx="18" ry="10" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M192 308 Q202 334 204 378 Q206 422 204 458 Q202 476 194 480 Q184 484 176 480 Q168 476 166 458 Q164 422 166 378 Q168 334 178 308 Z" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <path d="M202 458 Q204 484 202 508 Q200 524 190 528 Q182 532 173 528 Q164 524 162 508 Q160 484 162 458" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+            <ellipse cx="190" cy="538" rx="18" ry="10" fill="#c8a882" stroke="#a88060" stroke-width=".8"/>
+
+            <!-- ---- CLICKABLE BACK ZONES ---- -->
+            <!-- Upper back -->
+            <path d="M66 104 L66 178 L214 178 L214 104 L190 100 L156 97 L124 97 L90 100 Z" class="zone" id="z-upper-back" fill="transparent" stroke="transparent" onclick="clickZone('upper-back')" onmouseenter="showTip(event,'upper-back')" onmouseleave="hideTip()"/>
+            <!-- Left mid back -->
+            <rect x="60" y="178" width="80" height="66" class="zone" id="z-lmback" fill="transparent" stroke="transparent" onclick="clickZone('lmback')" onmouseenter="showTip(event,'lmback')" onmouseleave="hideTip()"/>
+            <!-- Right mid back -->
+            <rect x="140" y="178" width="80" height="66" class="zone" id="z-rmback" fill="transparent" stroke="transparent" onclick="clickZone('rmback')" onmouseenter="showTip(event,'rmback')" onmouseleave="hideTip()"/>
+            <!-- Left lower back -->
+            <rect x="60" y="244" width="80" height="58" class="zone" id="z-llback" fill="transparent" stroke="transparent" onclick="clickZone('llback')" onmouseenter="showTip(event,'llback')" onmouseleave="hideTip()"/>
+            <!-- Right lower back -->
+            <rect x="140" y="244" width="80" height="58" class="zone" id="z-rlback" fill="transparent" stroke="transparent" onclick="clickZone('rlback')" onmouseenter="showTip(event,'rlback')" onmouseleave="hideTip()"/>
+            <!-- Glutes -->
+            <rect x="78" y="298" width="124" height="14" class="zone" id="z-glutes" fill="transparent" stroke="transparent" onclick="clickZone('glutes')" onmouseenter="showTip(event,'glutes')" onmouseleave="hideTip()"/>
+          </g>
+
+          <!-- ======= PAINT LAYER (on top) ======= -->
+          <g id="paint-layer" style="pointer-events:none;"></g>
+
+        </svg>
+      </div>
+    </div>
+
+    <!-- Region info -->
+    <div class="panel">
+      <div class="ptitle">Selected Region</div>
+      <div id="region-info" class="region-info-wrap">
+        <div class="region-empty">Click any body region to see anatomy &amp; what it means for you</div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="panel" style="padding:12px 15px;">
+      <div class="leg-row"><div class="leg-dot" style="background:rgba(239,68,68,.9); box-shadow:0 0 6px rgba(239,68,68,.5);"></div>Hurts right now</div>
+      <div class="leg-row"><div class="leg-dot" style="background:rgba(245,158,11,.9);"></div>Usual / recurring pain area</div>
+      <div style="font-size:10px; color:var(--muted); font-family:'IBM Plex Mono',monospace; margin-top:4px; line-height:1.5;">Switch Front/Back to mark all zones<br>Click again to remove a marker</div>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT COLUMN ===== -->
+  <div class="right-col">
+    <div class="stats-grid">
+      <div class="sc"><div class="sl">Duration</div><div class="sv va">~4 mo</div><div class="ss">Dec 2025 — present</div></div>
+      <div class="sc"><div class="sl">Cancer Risk</div><div class="sv vg">Very Low</div><div class="ss">MRI clear · FIT neg · Age 25</div></div>
+      <div class="sc"><div class="sl">Colonoscopy</div><div class="sv vg" style="font-size:13px;">Not Indicated</div><div class="ss">Not warranted by evidence</div></div>
+      <div class="sc"><div class="sl">Most Likely</div><div class="sv vt">Functional</div><div class="ss">IBS-type + dietary + supplements</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="ptitle">Deep Analysis</div>
+      <div class="tab-bar">
+        <button class="tab active" onclick="showTab(event,'likelihood')">Likelihood</button>
+        <button class="tab" onclick="showTab(event,'diet')">Diet Factors</button>
+        <button class="tab" onclick="showTab(event,'tests')">Tests</button>
+        <button class="tab" onclick="showTab(event,'timeline')">Timeline</button>
+        <button class="tab" onclick="showTab(event,'actions')">Next Steps</button>
+      </div>
+
+      <!-- LIKELIHOOD -->
+      <div class="tab-content active" id="tab-likelihood">
+        <div class="li"><div class="li-hdr"><span class="li-name">🟢 IBS / Functional Gut Disorder</span><span class="li-pct">82%</span></div><div class="bar-track"><div class="bar-fill bt" style="width:0%" data-w="82%"></div></div><div class="li-desc">Moving pain, bloating, gas, relief after bowel movement, diet-triggered — textbook IBS presentation</div></div>
+        <div class="li"><div class="li-hdr"><span class="li-name">🟡 Dietary Constipation + Dysbiosis</span><span class="li-pct">78%</span></div><div class="bar-track"><div class="bar-fill ba2" style="width:0%" data-w="78%"></div></div><div class="li-desc">High protein + zero fibre + iron supplements = textbook constipation. Microbiome shifts toward gas-producers.</div></div>
+        <div class="li"><div class="li-hdr"><span class="li-name">🟡 Splenic / Hepatic Flexure Syndrome</span><span class="li-pct">72%</span></div><div class="bar-track"><div class="bar-fill ba2" style="width:0%" data-w="72%"></div></div><div class="li-desc">Rib cage pain (both sides) = gas trapped at colon bends. Pain migrates = gas moving. Today's right-side stitch = hepatic flexure.</div></div>
+        <div class="li"><div class="li-hdr"><span class="li-name">🔵 Supplement Side Effects</span><span class="li-pct">68%</span></div><div class="bar-track"><div class="bar-fill bbl" style="width:0%" data-w="68%"></div></div><div class="li-desc">Iron → dark/sticky stools, constipation. Magnesium → now causing heartburn. Both directly match symptoms.</div></div>
+        <div class="li"><div class="li-hdr"><span class="li-name">🔵 SIBO (Small Intestinal Bacterial Overgrowth)</span><span class="li-pct">35%</span></div><div class="bar-track"><div class="bar-fill bbl" style="width:0%" data-w="35%"></div></div><div class="li-desc">Bloating, foul gas, variable stools worse after eating. Easy non-invasive breath test available.</div></div>
+        <div class="li"><div class="li-hdr"><span class="li-name">🔴 Structural / Sinister Cause</span><span class="li-pct">3%</span></div><div class="bar-track"><div class="bar-fill br" style="width:0%" data-w="3%"></div></div><div class="li-desc">MRI clear, FIT negative, age 25, fit, no weight loss, no bleeding — exceptionally unlikely</div></div>
+        <div class="two-col">
+          <div class="ec ec-s"><h4>Reassuring ✓</h4><ul><li>MRI — CLEAR</li><li>FIT — NEGATIVE</li><li>Pain moves (not fixed)</li><li>Relief after stool/gas</li><li>Age 25, fit, no weight loss</li><li>Diet-correlated</li><li>No rectal bleeding</li></ul></div>
+          <div class="ec ec-w"><h4>Monitor ⚠</h4><ul><li>Persisting 4+ months</li><li>Mucus in stool once</li><li>Stool colour/shape changes</li><li>Worse breathing in</li><li>Echo/water sensation</li><li>Lower back aching</li></ul></div>
+        </div>
+      </div>
+
+      <!-- DIET -->
+      <div class="tab-content" id="tab-diet">
+        <div style="font-size:11px; color:var(--muted); margin-bottom:11px; line-height:1.6;">Your diet is almost certainly a major driver. Here's what each element is contributing:</div>
+        <div class="fr"><div class="fi" style="background:rgba(239,68,68,.1);">🍗</div><div class="ft2"><h4>Repetitive high-protein, low-fibre meals</h4><p>High animal protein slows gut transit, promotes putrefactive bacteria, produces foul-smelling H₂S gas. No fibre = no bulk for bowel movement.</p></div><span class="imp ih">HIGH</span></div>
+        <div class="fr"><div class="fi" style="background:rgba(239,68,68,.1);">💊</div><div class="ft2"><h4>Iron supplements</h4><p>Directly causes constipation, dark/sticky stools, cramping in most people. Explains dark stool + constipation — not sinister at all.</p></div><span class="imp ih">HIGH</span></div>
+        <div class="fr"><div class="fi" style="background:rgba(245,158,11,.1);">🧲</div><div class="ft2"><h4>Magnesium (now causing heartburn)</h4><p>Wrong form (likely oxide) or dose. Draws water into gut — good for constipation but worsens gas. Heartburn = known dose-related side effect.</p></div><span class="imp im">MED</span></div>
+        <div class="fr"><div class="fi" style="background:rgba(245,158,11,.1);">🍫</div><div class="ft2"><h4>Protein bars daily</h4><p>Most bars contain sugar alcohols (sorbitol, erythritol, xylitol). Poorly absorbed. Directly cause bloating, gas, and erratic stools.</p></div><span class="imp im">MED</span></div>
+        <div class="fr"><div class="fi" style="background:rgba(107,114,153,.1);">🥦</div><div class="ft2"><h4>Minimal fruit/fibre/veg</h4><p>Fibre feeds beneficial gut bacteria and maintains transit. Without it, microbiome shifts toward gas-producing strains — starving your gut flora.</p></div><span class="imp ih">HIGH</span></div>
+        <div class="dtip"><strong>Highest leverage fix:</strong> Add 1–2 portions of fibre daily (oats, apple, psyllium husk) for 2 weeks. Pause iron (with GP). Check bars for sugar alcohols. Could resolve 60–70% of symptoms within a fortnight.</div>
+      </div>
+
+      <!-- TESTS -->
+      <div class="tab-content" id="tab-tests">
+        <div class="tc tc-s"><div class="tc-hdr"><h4>MRI Abdomen — NEGATIVE ✓</h4><span class="badge bg">CLEAR</span></div><p class="tc-body">Rules out tumours, IBD, organ abnormalities (liver, pancreas, kidneys, spleen), structural masses. Clear MRI at 25 = nothing physically wrong with your organs.</p></div>
+        <div class="tc tc-s"><div class="tc-hdr"><h4>FIT Test — NEGATIVE ✓</h4><span class="badge bg">CLEAR</span></div><p class="tc-body">Most sensitive non-invasive marker for colorectal cancer and polyps. Negative FIT at 25 = colon cancer extraordinarily unlikely. Iron dark stools would not cause false positive.</p></div>
+        <div class="tc tc-b"><div class="tc-hdr"><h4>Colonoscopy — NOT INDICATED</h4><span class="badge bb">OPTIONAL</span></div><p class="tc-body">With clear MRI, negative FIT, age 25, functional symptoms — most gastroenterologists would not scope you. Clinical path: dietary + supplement trial → functional assessment → scope only if no improvement after 6 months.</p></div>
+        <div class="tc tc-p"><div class="tc-hdr"><h4>Recommended Next Tests</h4><span class="badge" style="background:rgba(124,58,237,.15); color:#a78bfa; border:1px solid rgba(124,58,237,.3);">SUGGESTED</span></div><ul class="tc-list"><li><strong>Stool calprotectin</strong> — rules out IBD (Crohn's/colitis) non-invasively</li><li><strong>SIBO hydrogen breath test</strong> — matches bloating + gas pattern exactly</li><li><strong>Full bloods + CRP/ESR + coeliac screen</strong> — inflammation + gluten</li><li><strong>Thyroid (TSH, T4)</strong> — hypothyroid causes constipation + bloating</li><li><strong>H. pylori breath test</strong> — burping + upper GI discomfort</li></ul></div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="tab-content" id="tab-timeline">
+        <div class="tl">
+          <div class="tl-item"><div class="tl-date">DEC 2025</div><div class="tl-event">Symptoms begin</div><div class="tl-desc">Intermittent abdominal discomfort. Initially mild, easy to dismiss. High-protein diet, iron + magnesium supplementation ongoing.</div></div>
+          <div class="tl-item tl-warn"><div class="tl-date">DEC 2025 – JAN 2026</div><div class="tl-event">Pain starts moving + worsening</div><div class="tl-desc">Sharp/dull/stitch-like pain. Starts right, migrates left under rib cage. Bloating and burping increase. Fluctuates day to day.</div></div>
+          <div class="tl-item tl-warn"><div class="tl-date">JAN – FEB 2026</div><div class="tl-event">Full symptom cluster — anxiety peaks</div><div class="tl-desc">Foul gas, constipation, dark/sticky/thin stools. Mucus + orange specks once. Pain on deep inhale, lower back aching. Cancer concern grows.</div></div>
+          <div class="tl-item tl-warn"><div class="tl-date">FEB – MAR 2026</div><div class="tl-event">Investigations — both CLEAR</div><div class="tl-desc">MRI: NEGATIVE. FIT: NEGATIVE. Strong reassurance but symptoms persist. Magnesium now causing heartburn.</div></div>
+          <div class="tl-item tl-now"><div class="tl-date">MAR 2026 — NOW</div><div class="tl-event">Analysis + decision point</div><div class="tl-desc">Building understanding. Today: right-side stitch = hepatic flexure gas. Dietary + supplement factors identified as primary drivers.</div></div>
+          <div class="tl-item tl-future"><div class="tl-date">APR – MAY 2026</div><div class="tl-event">Target: symptom resolution</div><div class="tl-desc">With fibre, supplement adjustment, calprotectin + SIBO testing — resolution expected 4–8 weeks of consistent changes. Otherwise gastro referral.</div></div>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="tab-content" id="tab-actions">
+        <div class="alist">
+          <div class="aitem"><div class="anum n1">1</div><div><h4>Add fibre daily — highest leverage change</h4><p>1 apple, oats, sweet potato, or 1 tsp psyllium husk daily for 2 weeks. Most symptoms consistent with fibre-deficiency + microbiome disruption. This directly addresses the root cause.</p></div></div>
+          <div class="aitem"><div class="anum n2">2</div><div><h4>Pause iron supplements for 3 weeks (with GP)</h4><p>Iron is almost certainly causing dark/sticky stools and constipation. Supervised break while tracking symptoms. If needed, switch to ferrous bisglycinate — much gentler form.</p></div></div>
+          <div class="aitem"><div class="anum n3">3</div><div><h4>Check protein bars for sugar alcohols</h4><p>Look for sorbitol, erythritol, xylitol, maltitol in ingredients. Very common hidden cause of bloating + gas when eaten daily. Swap if found — observable change within 5–7 days.</p></div></div>
+          <div class="aitem"><div class="anum n4">4</div><div><h4>Request calprotectin + SIBO breath test</h4><p>Calprotectin = non-invasive IBD rule-out. SIBO breath test = bacterial overgrowth check. Both perfectly match your symptom pattern and are non-invasive.</p></div></div>
+          <div class="aitem"><div class="anum n5">5</div><div><h4>Colonoscopy — last resort only</h4><p>Not indicated now. If symptoms persist past 6 months with no response above, ask for gastro referral. Peace-of-mind scope is reasonable at that point — but start here first.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <h3>Bottom Line</h3>
+      <p>You're a 25-year-old fit male with a <strong>clear MRI and negative FIT</strong> — the two most important screening tools for serious gut pathology. Your symptom profile maps onto <strong>IBS-type functional gut disorder + dietary constipation + supplement side effects</strong>. Rib cage pain both sides is characteristic of <strong>trapped gas at the hepatic and splenic flexures of the colon</strong> — completely benign, directly caused by low fibre and constipation. Today's right-side stitch = textbook hepatic flexure. Fix the diet, adjust supplements, run a calprotectin test. That's the play.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ REGION DATA ============
+const regions = {
+  head: { label: 'Head', sub: 'Skull, brain, sinuses', organs: ['Brain', 'Sinuses', 'Jaw / TMJ'], note: 'Headaches can be gut-related via the gut-brain axis. Stress, gut dysbiosis, and sleep disruption all cause tension headaches. The gut-brain connection is well established.', user: null },
+  neck: { label: 'Neck / Throat', sub: 'Oesophagus, cervical spine, thyroid', organs: ['Oesophagus', 'Thyroid gland', 'Cervical spine'], note: 'Throat tightness or swallowing difficulty = could be acid reflux. Thyroid lives here — hypothyroidism directly causes constipation and bloating and is easy to miss.', user: null },
+  lchest: { label: 'Left Chest', sub: 'Heart, left lung, pectorals', organs: ['Heart', 'Left lung', 'Left pectoral', 'Lower oesophagus'], note: 'Pain here is usually cardiac, pulmonary, or musculoskeletal. Can also be referred from the stomach or oesophageal reflux. Breathing pain in this zone can sometimes be pleuritic (lung lining).', user: null },
+  rchest: { label: 'Right Chest', sub: 'Right lung, liver upper pole, pectorals', organs: ['Right lung', 'Liver (upper pole)', 'Right pectoral'], note: 'Lower right chest can be referred from the liver or gallbladder. Breathing-related pain can be pleuritic or musculoskeletal. Liver/gallbladder pain tends to be constant and associated with fatty meals.', user: null },
+  luq: {
+    label: 'Left Upper Quadrant (LUQ)',
+    sub: 'Splenic flexure · stomach · spleen',
+    organs: ['Stomach', 'Spleen', 'Splenic flexure of colon', 'Pancreas (left)', 'Left kidney (posterior)'],
+    note: 'Most common cause of pain here = splenic flexure syndrome — trapped gas at the colon\'s left bend under the rib cage. The "water/echo sensation" when pressing = gas-filled bowel wall. Worse lying down and on deep inhale. Can feel sharp, dull, or like a stitch.',
+    user: '🎯 YOUR PRIMARY ZONE — most frequent pain site. Classic splenic flexure gas entrapment. Low-fibre diet and constipation are the direct cause.'
+  },
+  ruq: {
+    label: 'Right Upper Quadrant (RUQ)',
+    sub: 'Hepatic flexure · liver · gallbladder',
+    organs: ['Liver', 'Gallbladder', 'Hepatic flexure of colon', 'Pancreas (head)', 'Right kidney (posterior)'],
+    note: 'Hepatic flexure syndrome = trapped gas at the colon\'s right bend. Sharp stitch-like pain, worsens on inhale, often felt as a cramp. Very common with constipation + low fibre. Liver/gallbladder pain is more constant and associated with nausea + fatty meals.',
+    user: '📍 TODAY\'S PAIN — the sharp stitch you felt today is classic hepatic flexure gas. Gas migrated from the left bend to the right bend of the colon.'
+  },
+  central: { label: 'Central Abdomen', sub: 'Small intestine, transverse colon, umbilical', organs: ['Small intestine', 'Transverse colon', 'Aorta', 'Mesenteric lymph nodes'], note: 'Cramping central pain = usually small bowel, gas, IBS, or food intolerance. Bloating is most strongly felt here. Colicky (wave-like) central pain is very characteristic of functional bowel disorders like IBS.', user: '⬛ BLOAT / GAS ZONE — your bloating and trapped gas pressure tends to concentrate here. Direct result of constipation and microbiome imbalance.' },
+  llq: { label: 'Left Lower Quadrant (LLQ)', sub: 'Descending colon, sigmoid colon', organs: ['Descending colon', 'Sigmoid colon', 'Left ureter'], note: 'Pain here = often sigmoid or descending colon constipation. Diverticulitis (in older people) starts here. In young fit people, most commonly trapped stool or gas in the sigmoid — especially with a low-fibre diet.', user: null },
+  rlq: { label: 'Right Lower Quadrant (RLQ)', sub: 'Appendix, cecum, ascending colon', organs: ['Appendix', 'Cecum', 'Ascending colon', 'Ileocecal valve'], note: 'Classic appendicitis zone — but appendicitis is constant, rapidly worsening, with fever and nausea. Intermittent RLQ pain is almost never appendicitis. More commonly gas in the ascending colon or ileocecal valve irritation from IBS.', user: null },
+  'upper-back': { label: 'Upper Back', sub: 'Thoracic spine, trapezius, shoulder blades', organs: ['Thoracic spine T1–T8', 'Trapezius', 'Rhomboids', 'Scapulae'], note: 'Upper back pain = usually musculoskeletal (posture, tension). Interscapular pain can be referred from the oesophagus or stomach (reflux). Not typically gut-related directly.', user: null },
+  lmback: { label: 'Left Mid Back', sub: 'Left kidney, lower thoracic spine, left flank', organs: ['Left kidney', 'Adrenal gland', 'Thoracic spine T9–T12', 'Psoas muscle'], note: 'Left kidney pain = constant, flank location, can radiate to groin (kidney stone). Most mid-back pain at your age is musculoskeletal — posture and movement related.', user: null },
+  rmback: { label: 'Right Mid Back', sub: 'Right kidney, liver referred, lower thoracic', organs: ['Right kidney', 'Liver (referred pain)', 'Thoracic spine T9–T12'], note: 'Right kidney flank pain. Liver/gallbladder can refer pain to the right mid-back. Musculoskeletal in most cases for someone your age and fitness level.', user: null },
+  llback: {
+    label: 'Left Lower Back',
+    sub: 'Lumbar spine, sacroiliac joint, descending colon (referred)',
+    organs: ['Lumbar spine L1–L5', 'Sacroiliac (SI) joint', 'Psoas / iliacus', 'Descending colon (referred)'],
+    note: 'Lower back ache with gut symptoms = very commonly referred pain from a distended, gas-filled colon. The colon shares nerve pathways with the lower back muscles. When the bowel is backed up or gassy, back aching is a direct consequence — not a separate problem.',
+    user: '⚠️ YOUR BACK ACHE — almost certainly referred gut pain, not a separate back issue. Will resolve as gut symptoms improve.'
+  },
+  rlback: { label: 'Right Lower Back', sub: 'Lumbar spine, sacroiliac joint', organs: ['Lumbar spine', 'SI joint', 'Psoas / iliacus', 'Ascending colon (referred)'], note: 'Same as left lower back — referred from gut distension, or lumbar/SI joint strain. Lower back pain that tracks with gut symptoms = almost certainly gut-referred.', user: null },
+  glutes: { label: 'Glutes / Sacrum', sub: 'Gluteal muscles, sacrum, coccyx', organs: ['Gluteus maximus', 'Sacrum', 'Coccyx', 'Piriformis'], note: 'Gluteal pain = usually musculoskeletal, sciatic nerve, or piriformis syndrome. Can be referred from sacroiliac joint. Not typically gut-related.', user: null }
+};
+
+// Zone center coordinates for paint labels [cx, cy]
+const zoneCenters = {
+  head:[140,46], neck:[140,93], lchest:[105,137], rchest:[175,137],
+  luq:[100,201], ruq:[180,201], central:[140,256], llq:[101,295], rlq:[179,295],
+  'upper-back':[140,140], lmback:[100,211], rmback:[180,211],
+  llback:[100,273], rlback:[180,273], glutes:[140,305]
+};
+
+// ============ STATE ============
+let view = 'front';
+let mode = 'now';
+const pain = { luq: 'usual', ruq: 'now', central: 'usual', llback: 'usual' };
+
+// ============ PAINT ============
+function paint() {
+  const layer = document.getElementById('paint-layer');
+  layer.innerHTML = '';
+
+  const nowColor = { fill:'rgba(239,68,68,0.32)', stroke:'rgba(239,68,68,0.92)', sw:2.5 };
+  const usualColor = { fill:'rgba(245,158,11,0.22)', stroke:'rgba(245,158,11,0.85)', sw:1.8 };
+
+  Object.entries(pain).forEach(([zid, state]) => {
+    const src = document.getElementById('z-' + zid);
+    if (!src) return;
+    const parentGroup = src.closest('g[id]');
+    // Only paint if in current view
+    if ((view === 'front' && parentGroup.id !== 'g-front') ||
+        (view === 'back'  && parentGroup.id !== 'g-back')) return;
+
+    const c = state === 'now' ? nowColor : usualColor;
+    const clone = src.cloneNode(false);
+    clone.removeAttribute('onclick');
+    clone.removeAttribute('onmouseenter');
+    clone.removeAttribute('onmouseleave');
+    clone.removeAttribute('class');
+    clone.removeAttribute('id');
+    clone.setAttribute('fill', c.fill);
+    clone.setAttribute('stroke', c.stroke);
+    clone.setAttribute('stroke-width', c.sw);
+    clone.setAttribute('rx', src.getAttribute('rx') || '0');
+
+    if (state === 'now') {
+      const a = document.createElementNS('http://www.w3.org/2000/svg','animate');
+      a.setAttribute('attributeName','opacity');
+      a.setAttribute('values','1;0.55;1');
+      a.setAttribute('dur','2.2s');
+      a.setAttribute('repeatCount','indefinite');
+      clone.appendChild(a);
+    }
+    layer.appendChild(clone);
+
+    // Label dot
+    const ctr = zoneCenters[zid];
+    if (ctr) {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx', ctr[0]);
+      dot.setAttribute('cy', ctr[1]);
+      dot.setAttribute('r', '5');
+      dot.setAttribute('fill', state === 'now' ? 'rgba(255,100,100,0.95)' : 'rgba(255,200,50,0.95)');
+      if (state === 'now') {
+        const a2 = document.createElementNS('http://www.w3.org/2000/svg','animate');
+        a2.setAttribute('attributeName','r');
+        a2.setAttribute('values','5;8;5');
+        a2.setAttribute('dur','2.2s');
+        a2.setAttribute('repeatCount','indefinite');
+        dot.appendChild(a2);
+      }
+      layer.appendChild(dot);
+    }
+  });
+
+  // Update zone count
+  document.getElementById('zone-count').textContent = Object.keys(pain).length + ' zones marked';
+}
+
+// ============ INTERACTIONS ============
+function setView(v) {
+  view = v;
+  document.getElementById('g-front').style.display = v === 'front' ? '' : 'none';
+  document.getElementById('g-back').style.display  = v === 'back'  ? '' : 'none';
+  document.getElementById('btn-front').classList.toggle('active', v === 'front');
+  document.getElementById('btn-back').classList.toggle('active', v === 'back');
+  paint();
+}
+
+function setPainMode(m) {
+  mode = m;
+  ['now','usual','clear'].forEach(x => {
+    const el = document.getElementById('pm-' + x);
+    el.className = 'pm-btn pm-' + x + (mode === x ? ' sel' : '');
+  });
+  const lbl = document.getElementById('mode-label');
+  if (m === 'now') { lbl.textContent = 'HURTS NOW'; lbl.style.color = 'var(--danger)'; }
+  else if (m === 'usual') { lbl.textContent = 'USUAL PAIN'; lbl.style.color = 'var(--warn)'; }
+  else { lbl.textContent = 'CLEAR'; lbl.style.color = 'var(--muted)'; }
+}
+
+function clickZone(zid) {
+  if (mode === 'clear') {
+    delete pain[zid];
+  } else {
+    pain[zid] = pain[zid] === mode ? (delete pain[zid], null) : mode;
+    if (pain[zid] === null) delete pain[zid];
+  }
+  paint();
+  showRegionInfo(zid);
+}
+
+function showTip(e, zid) {
+  const d = regions[zid]; if (!d) return;
+  const t = document.getElementById('tooltip');
+  document.getElementById('tt-title').textContent = d.label;
+  document.getElementById('tt-sub').textContent = d.sub;
+  t.style.display = 'block';
+  const wrap = e.target.closest('.body-wrap');
+  const r = wrap.getBoundingClientRect();
+  let x = e.clientX - r.left + 14;
+  let y = e.clientY - r.top - 10;
+  if (x + 190 > r.width) x = e.clientX - r.left - 190;
+  t.style.left = x + 'px';
+  t.style.top  = y + 'px';
+}
+function hideTip() { document.getElementById('tooltip').style.display = 'none'; }
+
+function showRegionInfo(zid) {
+  const d = regions[zid]; if (!d) return;
+  const state = pain[zid];
+  const stateHtml = state === 'now'
+    ? ' <span style="color:var(--danger);font-size:11px;font-weight:700;margin-left:4px;">● NOW</span>'
+    : state === 'usual'
+    ? ' <span style="color:var(--warn);font-size:11px;font-weight:700;margin-left:4px;">◉ USUAL</span>'
+    : '';
+  document.getElementById('region-info').innerHTML = `
+    <div class="ri-header">
+      <h3>${d.label}${stateHtml}</h3>
+      <p>${d.sub}</p>
+    </div>
+    <div class="organ-tags">${d.organs.map(o=>`<span class="otag">${o}</span>`).join('')}</div>
+    <div class="ri-note">${d.note}</div>
+    ${d.user ? `<div class="ri-user">${d.user}</div>` : ''}
+  `;
+}
+
+function showTab(e, name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  e.target.classList.add('active');
+}
+
+// ============ INIT ============
+window.addEventListener('load', () => {
+  paint();
+  showRegionInfo('luq');
+  setTimeout(() => {
+    document.querySelectorAll('.bar-fill').forEach(el => { el.style.width = el.getAttribute('data-w'); });
+  }, 400);
+});
+</script>
+</body>
+</html>
