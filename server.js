@@ -822,6 +822,159 @@ cron.schedule('0 8 * * 0', async () => {
   }
 });
 
+// ─── JARVIS Chat — Natural Language Logging ──────────────────────────────────
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, history = [] } = req.body;
+    if (!message) return res.status(400).json({ error: 'No message provided' });
+
+    const fetch = require('node-fetch');
+    const today = new Date().toISOString().slice(0, 10);
+
+    const systemPrompt = `You are JARVIS, Jack's personal AI health assistant integrated into his health OS.
+Jack: 25 years old, 6'2" (188cm), ~100kg, male, lean bulking / performance focus.
+
+When Jack tells you about his day, you:
+1. Extract any health data mentioned
+2. Log it by returning structured actions
+3. Respond conversationally like the real JARVIS — concise, intelligent, slightly dry
+
+TODAY'S DATE: ${today}
+
+You can log the following action types. Return a JSON object with:
+- "response": your conversational reply to Jack (1-3 sentences max, JARVIS-style)
+- "actions": array of logging actions to execute
+
+ACTION TYPES:
+
+{ "type": "diet", "data": { "food_name": "string", "meal_type": "breakfast|lunch|dinner|snack", "calories": number|null, "protein_g": number|null, "carbs_g": number|null, "fat_g": number|null, "fiber_g": number|null, "notes": "string" } }
+
+{ "type": "gut", "data": { "pain_severity": 0-10, "bloat_level": 0-10, "gas_level": 0-10, "reflux_level": 0-10, "bristol_type": 1-7|null, "pain_locations": "string|null", "notes": "string" } }
+
+{ "type": "workout", "data": { "type": "Zone 2 Cardio|Strength|HIIT|Sport|Walk|Other", "duration_min": number, "avg_hr": number|null, "notes": "string" } }
+
+{ "type": "body_comp", "data": { "weight_kg": number|null, "body_fat_pct": number|null, "waist_cm": number|null, "notes": "string" } }
+
+{ "type": "supplement", "data": { "name": "string", "dose": "string", "timing": "morning|afternoon|evening|pre-workout|post-workout|with-meal|before-bed" } }
+
+{ "type": "cognitive", "data": { "notes": "string", "focus_score": 1-10|null, "energy_score": 1-10|null, "mood_score": 1-10|null } }
+
+{ "type": "state_of_mind", "data": { "valence": "pleasant|slightly_pleasant|neutral|slightly_unpleasant|unpleasant", "energy": "high|medium|low", "notes": "string" } }
+
+RULES:
+- Only log things Jack actually mentions. Don't invent data.
+- Estimate calories/macros if Jack describes food without exact numbers (use realistic values)
+- If nothing to log, return empty actions array and just chat
+- Keep response under 60 words, JARVIS-style (intelligent, dry, helpful)
+- Never say "I've logged" repeatedly — vary your language
+- If Jack mentions pain/discomfort, acknowledge it and ask a brief follow-up if relevant
+
+Return ONLY valid JSON. No markdown, no explanation outside the JSON.`;
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...history.slice(-6).map(h => ({ role: h.role, content: h.content })),
+      { role: 'user', content: message }
+    ];
+
+    const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages,
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+        max_tokens: 800
+      })
+    });
+
+    const gptData = await gptRes.json();
+    if (gptData.error) throw new Error(gptData.error.message);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(gptData.choices[0].message.content);
+    } catch {
+      parsed = { response: gptData.choices[0].message.content, actions: [] };
+    }
+
+    const { response, actions = [] } = parsed;
+    const logged = [];
+    const database = db.getDb();
+
+    for (const action of actions) {
+      try {
+        const d = action.data;
+        const date = d.date || today;
+
+        if (action.type === 'diet') {
+          database.prepare(`INSERT INTO diet_logs (date, meal_type, food_name, calories, protein, carbs, fat, fibre, raw_input)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            date, d.meal_type || 'meal', d.food_name || 'Food', d.calories || null,
+            d.protein_g || null, d.carbs_g || null, d.fat_g || null, d.fiber_g || null,
+            `[JARVIS Chat] ${d.food_name || ''}`);
+          logged.push(`diet: ${d.food_name}`);
+
+        } else if (action.type === 'gut') {
+          database.prepare(`INSERT INTO gut_logs (date, pain_severity, bloat_level, gas_level, reflux_level, bristol_type, pain_locations, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            date, d.pain_severity ?? 0, d.bloat_level ?? 0, d.gas_level ?? 0,
+            d.reflux_level ?? 0, d.bristol_type || null, d.pain_locations || null, d.notes || '');
+          logged.push('gut log');
+
+        } else if (action.type === 'workout') {
+          database.prepare(`INSERT INTO workouts (date, type, duration_minutes, avg_hr, notes, source)
+            VALUES (?, ?, ?, ?, ?, ?)`).run(
+            date, d.type || 'Other', d.duration_min || null, d.avg_hr || null, d.notes || '', 'jarvis-chat');
+          logged.push(`workout: ${d.type}`);
+
+        } else if (action.type === 'body_comp') {
+          const bf = d.body_fat_pct || null;
+          const wt = d.weight_kg || null;
+          const lean = wt && bf ? Math.round((wt * (1 - bf / 100)) * 10) / 10 : null;
+          database.prepare(`INSERT INTO body_comp (date, weight_kg, body_fat_pct, lean_mass_kg, waist_cm, source, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+            date, wt, bf, lean, d.waist_cm || null, 'jarvis-chat', d.notes || '');
+          logged.push('body comp');
+
+        } else if (action.type === 'supplement') {
+          database.prepare(`INSERT INTO supplements (date, name, dose, form, timing, notes)
+            VALUES (?, ?, ?, ?, ?, ?)`).run(
+            date, d.name, d.dose || '', d.form || '', d.timing || 'morning', d.notes || '');
+          logged.push(`supplement: ${d.name}`);
+
+        } else if (action.type === 'cognitive') {
+          database.prepare(`INSERT INTO cognitive_tests (date, test_type, notes, stress_level)
+            VALUES (?, ?, ?, ?)`).run(
+            date, 'journal', d.notes || '', d.stress_level || null);
+          logged.push('cognitive log');
+
+        } else if (action.type === 'state_of_mind') {
+          database.prepare(`INSERT INTO state_of_mind (date, valence, labels, notes, source)
+            VALUES (?, ?, ?, ?, ?)`).run(
+            date, d.valence || 'neutral', d.energy || '', d.notes || '', 'jarvis-chat');
+          logged.push('state of mind');
+        }
+      } catch (actionErr) {
+        console.error(`[CHAT] Action ${action.type} failed:`, actionErr.message);
+      }
+    }
+
+    if (logged.length > 0) console.log('[CHAT] Logged:', logged.join(', '));
+
+    res.json({ response, logged, actions });
+
+  } catch (e) {
+    console.error('[CHAT] Error:', e.message);
+    res.status(500).json({ error: e.message, response: 'Systems error. Try again.' });
+  }
+});
+
 // ─── Serve frontend ──────────────────────────────────────────────────────────
 
 app.get('*', (req, res) => {

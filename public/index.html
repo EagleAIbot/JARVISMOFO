@@ -1235,6 +1235,53 @@
 <script src="/js/correlations.js"></script>
 <script src="/js/experiments.js"></script>
 <script src="/js/body-comp.js"></script>
+<script src="/js/chat.js"></script>
+
+<!-- ─── JARVIS Chat ──────────────────────────────────────────────────── -->
+<div id="jarvis-chat-btn" onclick="toggleChat()" title="Talk to JARVIS">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <polygon points="12,2 22,7 22,17 12,22 2,17 2,7" fill="rgba(0,229,255,0.15)" stroke="#00e5ff" stroke-width="1.5"/>
+    <circle cx="12" cy="12" r="3" fill="#00e5ff" style="filter:drop-shadow(0 0 4px #00e5ff)"/>
+  </svg>
+  <span>JARVIS</span>
+  <span id="chat-notif" class="chat-notif hidden"></span>
+</div>
+
+<div id="jarvis-chat-panel">
+  <div id="chat-header">
+    <div class="chat-header-left">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <polygon points="12,2 22,7 22,17 12,22 2,17 2,7" fill="rgba(0,229,255,0.15)" stroke="#00e5ff" stroke-width="1.5"/>
+        <circle cx="12" cy="12" r="3" fill="#00e5ff"/>
+      </svg>
+      <span>J.A.R.V.I.S.</span>
+      <span class="chat-status-dot"></span>
+    </div>
+    <button onclick="toggleChat()" class="chat-close">✕</button>
+  </div>
+
+  <div id="chat-messages">
+    <div class="chat-msg jarvis">
+      <div class="chat-bubble">Good. All systems operational. Tell me about your day — food, training, how you're feeling. I'll handle the logging.</div>
+    </div>
+  </div>
+
+  <div id="chat-typing" class="hidden">
+    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+  </div>
+
+  <div id="chat-input-row">
+    <button id="chat-voice-btn" onclick="toggleVoice()" title="Voice input">🎙</button>
+    <input id="chat-input" type="text" placeholder="Tell me about your day..." autocomplete="off"
+           onkeydown="if(event.key==='Enter') sendChat()">
+    <button id="chat-send-btn" onclick="sendChat()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <path d="M22 2L11 13" stroke="#00e5ff" stroke-width="2" stroke-linecap="round"/>
+        <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#00e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+</div>
 
 </body>
 </html>
